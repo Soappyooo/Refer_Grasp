@@ -1,5 +1,5 @@
-/BlenderProc-main/
 /examples/
+/blender_files/
 /models/
 /models\ for\ grasp/
 /output/
@@ -11,3 +11,4 @@
 /*.blend*
 /*.txt
 *.pyc
+/*.log

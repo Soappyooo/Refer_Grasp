@@ -17,8 +17,7 @@ bproc.init()
 
 print("loading background...")
 # load background into the scene
-background_objs = bproc.loader.load_blend(
-    os.path.join(background_dir, background_file))
+background_objs = bproc.loader.load_blend(os.path.join(background_dir, background_file))
 for obj in background_objs:
     obj.set_cp("category_id", 0)
 
@@ -27,8 +26,7 @@ print("loading objects...")
 active_objs: list[bproc.types.MeshObject] = []
 for file_name in os.listdir(obj_dir):
     if file_name.endswith(".obj"):
-        active_objs += bproc.loader.load_obj(os.path.join(
-            obj_dir, file_name), use_legacy_obj_import=True)
+        active_objs += bproc.loader.load_obj(os.path.join(obj_dir, file_name), use_legacy_obj_import=True)
 
     # for test
     # if len(active_objs) > 10:
@@ -36,14 +34,12 @@ for file_name in os.listdir(obj_dir):
     # #######
 
 for j, obj in enumerate(active_objs):
-    obj.set_cp("category_id", j+1)
+    obj.set_cp("category_id", j + 1)
 
 
-surface: bproc.types.MeshObject = bproc.filter.one_by_attr(
-    background_objs, "name", "plane")
+surface: bproc.types.MeshObject = bproc.filter.one_by_attr(background_objs, "name", "plane")
 surface.hide(True)
-planes: list[bproc.types.MeshObject] = bproc.filter.by_attr(
-    background_objs, "name", "^plane(?!$).*$", regex=True)
+planes: list[bproc.types.MeshObject] = bproc.filter.by_attr(background_objs, "name", "^plane(?!$).*$", regex=True)
 
 for obj in active_objs:
     obj.set_location([2, 2, 2])
@@ -58,20 +54,13 @@ light.set_type("POINT")
 # activate normal and depth rendering
 bproc.renderer.enable_normals_output()
 bproc.renderer.enable_depth_output(activate_antialiasing=False)
-bproc.renderer.enable_segmentation_output(
-    map_by=["category_id", "instance", "name"])
+bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance", "name"])
 
 
 def sample_pose(obj: bproc.types.MeshObject):
     # Sample the spheres location above the surface
-    obj.set_location(bproc.sampler.upper_region(
-        objects_to_sample_on=[surface],
-        min_height=0.3,
-        max_height=1,
-        use_ray_trace_check=False
-    ))
-    obj.set_rotation_euler(np.random.uniform(
-        [0, 0, 0], [np.pi * 2, np.pi * 2, np.pi * 2]))
+    obj.set_location(bproc.sampler.upper_region(objects_to_sample_on=[surface], min_height=0.3, max_height=1, use_ray_trace_check=False))
+    obj.set_rotation_euler(np.random.uniform([0, 0, 0], [np.pi * 2, np.pi * 2, np.pi * 2]))
 
 
 def hsv2rgb(hsv: np.ndarray) -> np.ndarray:
@@ -104,21 +93,17 @@ for i in range(iterations):
 
     bproc.utility.reset_keyframes()
     # random select 3-6 active objects
-    selected_objs: list[bproc.types.MeshObject] = np.random.choice(
-        active_objs, np.random.randint(3, 6), replace=False)
+    selected_objs: list[bproc.types.MeshObject] = np.random.choice(active_objs, np.random.randint(3, 6), replace=False)
 
     for obj in selected_objs:
         obj.enable_rigidbody(True, friction=1)
         obj.hide(False)
 
-    surface.set_location(np.random.uniform(
-        [-0.7, 0.4, 0], [-0.4, 0.7, 0]))  # sample surface location
+    surface.set_location(np.random.uniform([-0.7, 0.4, 0], [-0.4, 0.7, 0]))  # sample surface location
 
-    selected_objs = bproc.object.sample_poses_on_surface(
-        selected_objs, surface, sample_pose, min_distance=0.005, max_distance=10)
+    selected_objs = bproc.object.sample_poses_on_surface(selected_objs, surface, sample_pose, min_distance=0.005, max_distance=10)
 
-    bproc.object.simulate_physics_and_fix_final_poses(
-        min_simulation_time=2, max_simulation_time=4, check_object_interval=1)
+    bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4, check_object_interval=1)
 
     # define a light and set its location and energy level
     light.set_location(np.random.uniform([-1, 0, 0.5], [0, 1, 1.5]))
@@ -129,32 +114,29 @@ for i in range(iterations):
 
     for i in range(images_per_iteration):
         # Sample random camera location above objects
-        location = np.random.uniform(
-            [0.5+poi[0], -0.8+poi[1], 0.1], [0.8+poi[0], -0.5+poi[1], 0.5])
+        location = np.random.uniform([0.5 + poi[0], -0.8 + poi[1], 0.1], [0.8 + poi[0], -0.5 + poi[1], 0.5])
         # Compute rotation based on vector going from location towards poi
-        rotation_matrix = bproc.camera.rotation_from_forward_vec(
-            poi - location, inplane_rot=np.random.uniform(-np.pi / 6, np.pi / 6))
+        rotation_matrix = bproc.camera.rotation_from_forward_vec(poi - location, inplane_rot=np.random.uniform(-np.pi / 6, np.pi / 6))
         # Add homog cam pose based on location an rotation
-        cam2world_matrix = bproc.math.build_transformation_mat(
-            location, rotation_matrix)
+        cam2world_matrix = bproc.math.build_transformation_mat(location, rotation_matrix)
         bproc.camera.add_camera_pose(cam2world_matrix)
     bproc.camera.set_resolution(resolution_w, resolution_h)
 
     # render the whole pipeline
     bproc.renderer.enable_segmentation_output(map_by=["category_id", "instance", "name"])
     data = bproc.renderer.render()
-    data["depth"] = bproc.postprocessing.add_kinect_azure_noise(
-        data["depth"], data["colors"])
+    data["depth"] = bproc.postprocessing.add_kinect_azure_noise(data["depth"], data["colors"])
 
     for obj in selected_objs:
         obj.disable_rigidbody()
         obj.hide(True)
 
     # write the data to a .hdf5 container
-    bproc.writer.write_hdf5(hdf5_output_dir, data,
-                            append_to_existing_output=True)
-    bproc.writer.write_coco_annotations(coco_output_dir,
-                                        instance_segmaps=data["instance_segmaps"],
-                                        instance_attribute_maps=data["instance_attribute_maps"],
-                                        colors=data["colors"],
-                                        color_file_format="JPEG")
+    bproc.writer.write_hdf5(hdf5_output_dir, data, append_to_existing_output=True)
+    bproc.writer.write_coco_annotations(
+        coco_output_dir,
+        instance_segmaps=data["instance_segmaps"],
+        instance_attribute_maps=data["instance_attribute_maps"],
+        colors=data["colors"],
+        color_file_format="JPEG",
+    )

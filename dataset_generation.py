@@ -6,43 +6,63 @@ import time
 import json
 import bpy
 from mathutils import Vector
+import logging
 
 # import debugpy
+
 # debugpy.listen(5678)
 # debugpy.wait_for_client()
+# debugpy.breakpoint()
 
-sys.path.append(os.path.abspath("."))
-
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+###
+sys.path.append("D:\\BlenderScripts")
+###
 from scene_graph_generation import SceneGraph
 from utils.dataset_utils import DatasetUtils
 
 obj_dir = "./models/ycb_models"  # 模型存放目录
 background_dir = "."  # 背景blend文件存放目录
-background_file = "background1.blend"  # 背景blend文件名
+background_file = "chair.blend"  # 背景blend文件名
 output_log = "./output_log.txt"
 output_dir = "./output"
-models_info_file = "./models/models_info.xlsx"
-iterations = 40
+models_info_file = "./models/models_info_test.xlsx"
+iterations = 2
 images_per_iteration = 5  # 每个iteration生成的图片数量，不同视角
 resolution_w = 512
 resolution_h = 512
 scene_graph_rows = 4
 scene_graph_cols = 4
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - [%(filename)s - line %(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    filename="dataset_generation.log",
+    filemode="w",
+)
+formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - [%(filename)s - line %(lineno)d] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(formatter)
+stream_handler.setLevel(logging.INFO)
+logging.getLogger().addHandler(stream_handler)
+
 
 bproc.init()
-f = open(output_log, "w")
-f.write(f"[{time.asctime()}]: started\n")
+# f = open(output_log, "w")
+# f.write(f"[{time.asctime()}]: started\n")
+logging.info("started")
 
 # check if output_dir has files
 for _, _, files in os.walk(output_dir):
     if files != []:
-        f.write(f"[{time.asctime()}]: WARNING: output_dir ({output_dir}) is not empty\n")
+        # f.write(f"[{time.asctime()}]: WARNING: output_dir ({output_dir}) is not empty\n")
+        logging.warning(f"output_dir ({output_dir}) is not empty")
         print(f"WARNING: output_dir ({output_dir}) is not empty, continue? (y/n)")
         if input() != "y":
-            f.write(f"[{time.asctime()}]: stopped because output_dir ({output_dir}) is not empty\n")
+            # f.write(f"[{time.asctime()}]: stopped because output_dir ({output_dir}) is not empty\n")
+            logging.warning(f"stopped because output_dir ({output_dir}) is not empty")
             print("stopped because output_dir is not empty")
-            f.close()
             sys.exit()
         else:
             break
@@ -55,19 +75,23 @@ background_objs = bproc.loader.load_blend(os.path.join(background_dir, backgroun
 for obj in background_objs:
     obj.set_cp("obj_id", None)
     obj.set_cp("scene_id", 255)
+    if type(obj) == bproc.types.MeshObject:
+        obj.disable_rigidbody()
 
 surface: bproc.types.MeshObject = bproc.filter.one_by_attr(background_objs, "name", "surface")
 surface.hide(True)
-walls: list[bproc.types.MeshObject] = bproc.filter.by_attr(background_objs, "name", "^plane(?!$).*$", regex=True)
-for wall in walls:
-    wall.enable_rigidbody(False, friction=1)
-floor: bproc.types.MeshObject = bproc.filter.one_by_attr(background_objs, "name", "floor")
-floor.enable_rigidbody(False, friction=1)
+surface.enable_rigidbody(True, friction=1)
+# walls: list[bproc.types.MeshObject] = bproc.filter.by_attr(background_objs, "name", "^plane(?!$).*$", regex=True)
+# for wall in walls:
+#     wall.enable_rigidbody(False, friction=1)
+# floor: bproc.types.MeshObject = bproc.filter.one_by_attr(background_objs, "name", "floor")
+# floor.enable_rigidbody(False, friction=1)
 
 light = bproc.types.Light()
 light.set_type("POINT")
 
 bproc.renderer.enable_depth_output(activate_antialiasing=False)
+bproc.renderer.set_max_amount_of_samples(16)
 
 active_objs: list[bproc.types.MeshObject] = []
 print("loading objects...")
@@ -78,7 +102,7 @@ for file_name in os.listdir(obj_dir):
         active_objs.append(obj)
         obj.set_cp("obj_id", file_name.split(".")[0])  # should be like obj_000001
     #######
-    if len(active_objs) > 21:
+    if len(active_objs) > 5:
         break
     #######
 
@@ -87,7 +111,8 @@ for i, obj in enumerate(active_objs):
     obj.set_location([2, 2, 2])
     obj.hide(True)
 
-f.write(f"[{time.asctime()}]: loaded objects\n")
+# f.write(f"[{time.asctime()}]: loaded objects\n")
+logging.info("loaded objects")
 
 
 def get_length_and_width_from_bbox(bbox: np.ndarray) -> tuple[float, float]:
@@ -108,7 +133,7 @@ def write_expressions_file(data: dict, file_name: str, append_to_existing_file: 
         data = {**existing_data, **data}
 
 
-def sample_pose(obj: bproc.types.MeshObject):
+def sample_pose(obj: bproc.types.MeshObject, **kwargs):
     # Sample the spheres location above the surface
     # obj.set_location(bproc.sampler.upper_region(
     #     objects_to_sample_on=[surface],
@@ -118,7 +143,8 @@ def sample_pose(obj: bproc.types.MeshObject):
     # ))
     # obj.set_rotation_euler(np.random.uniform(
     #     [0, 0, 0], [np.pi * 2, np.pi * 2, np.pi * 2]))
-    global surface
+    # global surface
+    surface: bproc.types.MeshObject = kwargs["surface"]
     x0, y0, z0 = get_base_coordinate_from_bbox(surface.get_bound_box())
     l, w = get_length_and_width_from_bbox(surface.get_bound_box())
     i, j = obj.get_cp("coordinate")
@@ -219,7 +245,8 @@ skips = 0
 i = 0
 while i < iterations:
     bproc.utility.reset_keyframes()
-    f.write(f"[{time.asctime()}]: iteration {i} started\n")
+    # f.write(f"[{time.asctime()}]: iteration {i} started\n")
+    logging.info(f"iteration {i} started")
 
     while True:
         if s.CreateScene(6) is True:
@@ -303,15 +330,18 @@ while i < iterations:
             render_flag = False
             if not all_objs_in_view:
                 print("put all objs in view failed")
-                f.write(f"[{time.asctime()}]: WARNING: put all objs in view failed for frame {j}. Skip render.\n")
+                # f.write(f"[{time.asctime()}]: WARNING: put all objs in view failed for frame {j}. Skip render.\n")
+                logging.warning(f"put all objs in view failed for frame {j}. Skip render.")
                 break
             elif not all_objs_not_occluded:
                 print("check occlusion failed")
-                f.write(f"[{time.asctime()}]: WARNING: check occlusion failed for frame {j}. Skip render.\n")
+                # f.write(f"[{time.asctime()}]: WARNING: check occlusion failed for frame {j}. Skip render.\n")
+                logging.warning(f"check occlusion failed for frame {j}. Skip render.")
                 break
             else:
                 print("unknown error")
-                f.write(f"[{time.asctime()}]: WARNING: unknown error. Skip render.\n")
+                # f.write(f"[{time.asctime()}]: WARNING: unknown error. Skip render.\n")
+                logging.warning("unknown error. Skip render.")
                 break
 
     if not render_flag:
@@ -319,13 +349,16 @@ while i < iterations:
             obj.delete()
         skips += 1
         print(f"no suitable camera pose found, skip iteration {i}")
-        f.write(f"[{time.asctime()}]: no suitable camera pose found, skip iteration {i}\n")
+        # f.write(f"[{time.asctime()}]: no suitable camera pose found, skip iteration {i}\n")
+        logging.info(f"no suitable camera pose found, skip iteration {i}")
         continue
     print(f"iteration {i} started rendering")
-    f.write(f"[{time.asctime()}]: iteration {i} started rendering\n")
+    # f.write(f"[{time.asctime()}]: iteration {i} started rendering\n")
+    logging.info(f"iteration {i} started rendering")
 
     scene_graph_idx = SceneGraph.WriteSceneGraphToFile(s, os.path.join(output_dir, "scene_graphs"), "scene_graph")
-    f.write(f"[{time.asctime()}]: wrote scene graph: {scene_graph_idx}\n")
+    # f.write(f"[{time.asctime()}]: wrote scene graph: {scene_graph_idx}\n")
+    logging.info(f"wrote scene graph: {scene_graph_idx}")
 
     bproc.camera.set_resolution(resolution_w, resolution_h)
 
@@ -336,22 +369,26 @@ while i < iterations:
     # render the whole pipeline
     data = bproc.renderer.render()
     data["depth"] = bproc.postprocessing.add_kinect_azure_noise(data["depth"], data["colors"])
-    f.write(f"[{time.asctime()}]: rendered {images_per_iteration} images\n")
+    # f.write(f"[{time.asctime()}]: rendered {images_per_iteration} images\n")
+    logging.info(f"rendered {images_per_iteration} images")
     for obj in selected_objs:
         obj.delete()
 
     # write expressions and images
     depth_idxs = DatasetUtils.WriteImage(data, os.path.join(output_dir, "depth"), "depth", file_name_prefix="depth", append_to_exsiting_file=True)
     print(f"write depth images: {depth_idxs}")
-    f.write(f"[{time.asctime()}]: wrote depth images: {depth_idxs}\n")
+    # f.write(f"[{time.asctime()}]: wrote depth images: {depth_idxs}\n")
+    logging.info(f"wrote depth images: {depth_idxs}")
     colors_idxs = DatasetUtils.WriteImage(data, os.path.join(output_dir, "rgb"), "colors", file_name_prefix="rgb", append_to_exsiting_file=True)
     print(f"write rgb images: {colors_idxs}")
-    f.write(f"[{time.asctime()}]: wrote rgb images: {colors_idxs}\n")
+    # f.write(f"[{time.asctime()}]: wrote rgb images: {colors_idxs}\n")
+    logging.info(f"wrote rgb images: {colors_idxs}")
     segmaps_idxs = DatasetUtils.WriteImage(
         data, os.path.join(output_dir, "mask"), "scene_id_segmaps", file_name_prefix="mask", append_to_exsiting_file=True
     )
     print(f"write mask images: {segmaps_idxs}")
-    f.write(f"[{time.asctime()}]: wrote mask images: {segmaps_idxs}\n")
+    # f.write(f"[{time.asctime()}]: wrote mask images: {segmaps_idxs}\n")
+    logging.info(f"wrote mask images: {segmaps_idxs}")
 
     expressions = []
     for j, expression in enumerate(s.GetComplexReferringExpressions()):
@@ -364,21 +401,26 @@ while i < iterations:
         segmaps_idxs, expressions, save_path=os.path.join(output_dir, "temp"), file_name_prefix="expressions"
     )
     print(f"write expressions: {expressions_idx}")
-    f.write(f"[{time.asctime()}]: wrote expressions json: {expressions_idx}\n")
+    # f.write(f"[{time.asctime()}]: wrote expressions json: {expressions_idx}\n")
+    logging.info(f"wrote expressions json: {expressions_idx}")
 
     if not DatasetUtils.CheckImageFileNums(output_dir, ["depth", "rgb", "mask"]):
-        f.write(f"[{time.asctime()}]: ERROR: image file numbers not match\n")
+        # f.write(f"[{time.asctime()}]: ERROR: image file numbers not match\n")
+        logging.error("image file numbers not match")
         raise Exception("image file numbers not match. see output_log.txt for details")
 
     i += 1
 
 num_expressions = DatasetUtils.MergeExpressions(output_dir, os.path.join(output_dir, "temp"))
-f.write(f"[{time.asctime()}]: merged expressions jsons\n")
+# f.write(f"[{time.asctime()}]: merged expressions jsons\n")
+logging.info("merged expressions jsons")
 if num_expressions != scene_graph_idx + 1:
-    f.write(
-        f"[{time.asctime()}]: ERROR: number of expressions jsons ({num_expressions}) and number of scene graphs ({scene_graph_idx+1}) not match\n"
-    )
+    # f.write(
+    #     f"[{time.asctime()}]: ERROR: number of expressions jsons ({num_expressions}) and number of scene graphs ({scene_graph_idx+1}) not match\n"
+    # )
+    logging.error(f"number of expressions jsons ({num_expressions}) and number of scene graphs ({scene_graph_idx+1}) not match")
     raise Exception("number of expressions not match. see output_log.txt for details")
 print(f"process finished with {iterations} successful iterations, {skips} skipped. see output_log.txt for details")
-f.write(f"[{time.asctime()}]: process finished with {iterations} successful iterations, {skips} skipped\n")
-f.close()
+# f.write(f"[{time.asctime()}]: process finished with {iterations} successful iterations, {skips} skipped\n")
+logging.info(f"process finished with {iterations} successful iterations, {skips} skipped")
+# f.close()
