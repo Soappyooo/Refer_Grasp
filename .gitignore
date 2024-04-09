@@ -1,0 +1,14 @@
+/examples/
+/blender_files/
+/models/
+/models\ for\ grasp/
+/output/
+/test_project/
+/ycb\ models/
+/.vscode/
+/__pycache__/
+/*.rar
+/*.blend*
+/*.txt
+*.pyc
+/*.log
