@@ -7,12 +7,13 @@ import textwrap
 from tqdm import tqdm
 import random
 from utils.poly_utils import is_clockwise, revert_direction, reorder_points, approximate_polygons, interpolate_polygons, polygons_to_string
+from typing import Union
 
 
 class DatasetUtils:
     @staticmethod
-    def WriteImage(
-        data: dict[str, list[np.ndarray]],
+    def write_image(
+        data: dict[str, Union[list[np.ndarray], np.ndarray]],
         save_path: str,
         key: str,
         file_name_prefix: str = None,
@@ -32,6 +33,9 @@ class DatasetUtils:
             # delete all existing files
             for file_name in os.listdir(save_path):
                 os.remove(os.path.join(save_path, file_name))
+        # unify data type to dict[str, list[np.ndarray]]
+        if isinstance(data[key], np.ndarray):
+            data[key] = [data[key]]
 
         match key:
             case "colors":
@@ -69,7 +73,7 @@ class DatasetUtils:
         return list(range(num_existing_files, num_existing_files + len(data[key])))
 
     @staticmethod
-    def WriteExpressions(img_idxs: list[int], expressions: dict, save_path: str, file_name_prefix: str = None) -> int:
+    def write_expressions(img_idxs: list[int], expressions: dict, save_path: str, file_name_prefix: str = None) -> int:
         # create directory if not exists
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -81,7 +85,7 @@ class DatasetUtils:
         return num_existing_files
 
     @staticmethod
-    def MergeExpressions(save_path: str, temp_path: str, file_name: str = "expressions.json", delete_temp: bool = True) -> int:
+    def merge_expressions(save_path: str, temp_path: str, file_name: str = "expressions.json", delete_temp: bool = True) -> int:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         # create empty json list if not exists
@@ -106,18 +110,21 @@ class DatasetUtils:
         return len(expressions)
 
     @staticmethod
-    def CheckImageFileNums(base_path: str, folder_names: list[str]) -> bool:
+    def check_image_file_nums(base_path: str, folder_names: list[str]) -> bool:
         # check if all folders have the same number of files
         num_files = []
         for folder_name in folder_names:
-            num_files.append(len(os.listdir(os.path.join(base_path, folder_name))))
+            try:
+                num_files.append(len(os.listdir(os.path.join(base_path, folder_name))))
+            except FileNotFoundError:
+                num_files.append(0)
         if len(set(num_files)) == 1:
             return True
         else:
             return False
 
     @staticmethod
-    def VisualizeImage(
+    def visualize_image(
         rgb_img_path: str,
         segmap_path: str,
         expressions_json_path: str,
@@ -157,7 +164,7 @@ class DatasetUtils:
         # add segmap to rgb image
         for i, expression in enumerate(expressions):
             # get bound box
-            bound_box = DatasetUtils.GetBoundBox(segmap, expression["obj"]["scene_id"])
+            bound_box = DatasetUtils.get_bound_box(segmap, expression["obj"]["scene_id"])
             if bound_box is None:
                 continue
             top_left, bottom_right = bound_box
@@ -171,7 +178,7 @@ class DatasetUtils:
                 mask = segmap == expression["obj"]["scene_id"]
                 rgb_img[mask, :] = rgb_img[mask, :] * 0.6 + color * 0.4 * 255
             if display_polygon:
-                polygons = DatasetUtils.GetPolygons(segmap, expression["obj"]["scene_id"])
+                polygons = DatasetUtils.get_polygons(segmap, expression["obj"]["scene_id"])
                 for polygon in polygons:
                     # scatter
                     plt.scatter(polygon[:, 0, 0], polygon[:, 0, 1], s=5, color=color, alpha=0.5)
@@ -206,7 +213,7 @@ class DatasetUtils:
             plt.show()
 
     @staticmethod
-    def GetBoundBox(mask: np.ndarray, poi_idx: int) -> tuple[tuple[int, int], tuple[int, int]]:
+    def get_bound_box(mask: np.ndarray, poi_idx: int) -> tuple[tuple[int, int], tuple[int, int]]:
         # get bound box of a mask
         # mask: (H,W)
         # poi_idx: index of point of interest
@@ -227,12 +234,12 @@ class DatasetUtils:
     #     return (mask == poi_idx).astype(np.uint8) * 255
 
     @staticmethod
-    def GetPolygons(mask: np.ndarray, poi_idx: int) -> list[np.ndarray]:
+    def get_polygons(mask: np.ndarray, poi_idx: int) -> list[np.ndarray]:
         polygons = cv2.findContours((mask == poi_idx).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[0]
         return polygons
 
     @staticmethod
-    def GenerateTsvFileForREC(
+    def generate_tsv_file_for_REC(
         tsv_path: str, dataset_path: str, tsv_filename: str = None, expression_json_temp: list = None, shuffle: bool = True
     ) -> None:
         if expression_json_temp is not None and expression_json_temp != []:
@@ -247,7 +254,7 @@ class DatasetUtils:
                 mask_img_path = os.path.join(dataset_path, "mask", f"mask_{img_idx:08d}.png")
                 mask = cv2.imread(mask_img_path, cv2.IMREAD_UNCHANGED)
                 for item_expressions in item["expressions"]:
-                    bound_box = DatasetUtils.GetBoundBox(mask, item_expressions["obj"]["scene_id"])
+                    bound_box = DatasetUtils.get_bound_box(mask, item_expressions["obj"]["scene_id"])
                     expression = item_expressions["expression"]
                     # * tsv format: index \t expression \t x1,y1,x2,y2 \t path_to_image
                     line = f"{len(lines)}\t{expression}\t{bound_box[0][0]},{bound_box[0][1]},{bound_box[1][0]},{bound_box[1][1]}\t{rgb_img_path}\n"
@@ -266,7 +273,7 @@ class DatasetUtils:
             f.writelines(lines)
 
     @staticmethod
-    def GenerateTsvFileForRES(
+    def generate_tsv_file_for_RES(
         tsv_path: str, dataset_path: str, tsv_filename: str = None, expression_json_temp: list = None, shuffle: bool = True
     ) -> None:
         if expression_json_temp is not None and expression_json_temp != []:
@@ -281,9 +288,9 @@ class DatasetUtils:
                 mask_img_path = os.path.join(dataset_path, "mask", f"mask_{img_idx:08d}.png")
                 mask = cv2.imread(mask_img_path, cv2.IMREAD_UNCHANGED)
                 for item_expressions in item["expressions"]:
-                    bound_box = DatasetUtils.GetBoundBox(mask, item_expressions["obj"]["scene_id"])
+                    bound_box = DatasetUtils.get_bound_box(mask, item_expressions["obj"]["scene_id"])
                     expression = item_expressions["expression"]
-                    polygons = DatasetUtils.GetPolygons(mask, item_expressions["obj"]["scene_id"])
+                    polygons = DatasetUtils.get_polygons(mask, item_expressions["obj"]["scene_id"])
                     # reshape to array [[x1,y1,x2,y2,...],...]
                     polygons = [poly.flatten().tolist() for poly in polygons]
 
@@ -321,3 +328,44 @@ class DatasetUtils:
             tsv_filename = "train_shuffled.tsv"
         with open(os.path.join(tsv_path, tsv_filename), "w") as f:
             f.writelines(lines)
+
+    @staticmethod
+    def rename_obj_files(obj_file: str, mtl_file: str, texture_file: str, new_name_prefix: str) -> None:
+        """
+        Rename the obj, mtl and texture files to a new name. Make sure three files are in the same folder.
+
+        Example: `rename_obj_files('chair.obj','chair.mtl','chair.png','new_chair')` will rename the three files to 'new_chair.obj','new_chair.mtl','new_chair.png'.
+
+        Args:
+            obj_file (str): The path of the obj file (.obj).
+            mtl_file (str): The path of the mtl file (.mtl).
+            texture_file (str): The path of the texture file (.png or .jpg).
+            new_name_prefix (str): The new name prefix of the three files.
+        """
+        import os
+
+        png_or_jpg = texture_file.split(".")[-1]
+        with open(obj_file, "r") as obj_file_read:
+            obj_lines = obj_file_read.readlines()
+            for i, line in enumerate(obj_lines):
+                # search for line containing 'mtllib'
+                if "mtllib" in line:
+                    # change the mtl file name to new name
+                    obj_lines[i] = line.replace(line.split()[1], new_name_prefix + ".mtl")
+                    break
+        with open(obj_file, "w") as obj_file_write:
+            obj_file_write.writelines(obj_lines)
+        with open(mtl_file, "r") as mtl_file_read:
+            mtl_lines = mtl_file_read.readlines()
+            for i, line in enumerate(mtl_lines):
+                if "map_Kd" in line:
+                    # change the png file name to new name without changing other content
+                    mtl_lines[i] = line.replace(line.split()[1], new_name_prefix + "." + png_or_jpg)
+                    break
+        with open(mtl_file, "w") as mtl_file_write:
+            mtl_file_write.writelines(mtl_lines)
+        # rename all files
+        file_folder = os.path.dirname(obj_file)
+        os.rename(obj_file, os.path.join(file_folder, new_name_prefix + ".obj"))
+        os.rename(mtl_file, os.path.join(file_folder, new_name_prefix + ".mtl"))
+        os.rename(texture_file, os.path.join(file_folder, new_name_prefix + "." + png_or_jpg))

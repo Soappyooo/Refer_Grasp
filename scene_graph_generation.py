@@ -100,7 +100,7 @@ class SceneGraph:
 
     def __init__(self, mapSize: tuple[int, int]) -> None:
         """
-        Create an empty scene with a map of size `mapSize`.\n
+        Create an empty scene with a map of size `mapSize`.
 
         Args:
             mapSize (tuple[int, int]): The size of the scene map (2D array).

@@ -9,12 +9,17 @@ from blenderproc.python.utility.CollisionUtility import CollisionUtility
 from blenderproc.python.types.MeshObjectUtility import MeshObject
 
 
-def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshObject,
-                            sample_pose_func: Callable[[MeshObject], None], max_tries: int = 100,
-                            min_distance: float = 0.25, max_distance: float = 0.6,
-                            up_direction: Optional[np.ndarray] = None,
-                            check_all_bb_corners_over_surface: bool = True) -> List[MeshObject]:
-    """ Samples objects poses on a surface.
+def sample_poses_on_surface(
+    objects_to_sample: List[MeshObject],
+    surface: MeshObject,
+    sample_pose_func: Callable[[MeshObject, MeshObject], None],
+    max_tries: int = 100,
+    min_distance: float = 0.25,
+    max_distance: float = 0.6,
+    up_direction: Optional[np.ndarray] = None,
+    check_all_bb_corners_over_surface: bool = True,
+) -> List[MeshObject]:
+    """Samples objects poses on a surface.
 
     The objects are positioned slightly above the surface due to the non-axis aligned nature of used bounding boxes
     and possible non-alignment of the sampling surface (i.e. on the X-Y hyperplane, can be somewhat mitigated with
@@ -35,11 +40,10 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
     :return: The list of placed objects.
     """
     if len(set(objects_to_sample)) != len(objects_to_sample):
-        raise ValueError("The given list of objects to sample contains duplicates. "
-                         "This leads to complications in the sampling process.")
+        raise ValueError("The given list of objects to sample contains duplicates. " "This leads to complications in the sampling process.")
 
     if up_direction is None:
-        up_direction = np.array([0., 0., 1.])
+        up_direction = np.array([0.0, 0.0, 1.0])
     else:
         up_direction /= np.linalg.norm(up_direction)
 
@@ -56,7 +60,7 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
         placed_successfully = False
 
         for i in range(max_tries):
-            sample_pose_func(obj)
+            sample_pose_func(obj, surface)
             # Remove bvh cache, as object has changed
             if obj.get_name() in bvh_cache:
                 del bvh_cache[obj.get_name()]
@@ -86,7 +90,7 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
                 print("Collision detected after drop, retrying!")
                 continue
 
-            print(f"Placed object \"{obj.get_name()}\" successfully at {obj.get_location()} after {i + 1} iterations!")
+            print(f'Placed object "{obj.get_name()}" successfully at {obj.get_location()} after {i + 1} iterations!')
             placed_objects.append(obj)
 
             placed_successfully = True
@@ -103,9 +107,8 @@ def sample_poses_on_surface(objects_to_sample: List[MeshObject], surface: MeshOb
 class _OnSurfaceSampler:
 
     @staticmethod
-    def check_above_surface(obj: MeshObject, surface: MeshObject, up_direction: np.ndarray,
-                            check_all_bb_corners_over_surface: bool = True) -> bool:
-        """ Check if all corners of the bounding box are "above" the surface
+    def check_above_surface(obj: MeshObject, surface: MeshObject, up_direction: np.ndarray, check_all_bb_corners_over_surface: bool = True) -> bool:
+        """Check if all corners of the bounding box are "above" the surface
 
         :param obj: Object for which the check is carried out. Type: blender object.
         :param surface: The surface object.
@@ -116,17 +119,15 @@ class _OnSurfaceSampler:
         """
         if check_all_bb_corners_over_surface:
             for point in obj.get_bound_box():
-                if not surface.position_is_above_object(point + up_direction, -up_direction,
-                                                        check_no_objects_in_between=False):
+                if not surface.position_is_above_object(point + up_direction, -up_direction, check_no_objects_in_between=False):
                     return False
             return True
         center = np.mean(obj.get_bound_box(), axis=0)
         return surface.position_is_above_object(center + up_direction, -up_direction, check_no_objects_in_between=False)
 
     @staticmethod
-    def check_spacing(obj: MeshObject, placed_objects: List[MeshObject], min_distance: float, max_distance: float) \
-            -> bool:
-        """ Check if object is not too close or too far from previous objects.
+    def check_spacing(obj: MeshObject, placed_objects: List[MeshObject], min_distance: float, max_distance: float) -> bool:
+        """Check if object is not too close or too far from previous objects.
 
         :param obj: Object for which the check is carried out.
         :param placed_objects: A list of already placed objects that should be used for checking spacing.
@@ -145,7 +146,7 @@ class _OnSurfaceSampler:
 
     @staticmethod
     def drop(obj: MeshObject, up_direction: np.ndarray, surface_height: float):
-        """ Moves object "down" until its bounding box touches the bounding box of the surface. This uses bounding boxes
+        """Moves object "down" until its bounding box touches the bounding box of the surface. This uses bounding boxes
             which are not aligned optimally, this will cause objects to be placed slightly to high.
 
         :param obj: Object to move. Type: blender object.
