@@ -140,6 +140,7 @@ class SceneGraph:
             for j in range(self.mapSize[1]):
                 self.forbiddenExpressionComponentsRegionMap[i, j] = []
         self.referringExpressionStructures.clear()
+        self.forbiddenExpressionComponentsGlobal.clear()
 
     def AddBaseObjectNode(
         self,
