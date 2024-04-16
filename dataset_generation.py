@@ -25,7 +25,7 @@ from utils.blender_utils import BlenderUtils
 
 OBJ_DIR = "./models/ycb_models"  # obj files directory
 BLENDER_SCENE_FILE_PATH = "./blender_files/background.blend"  # background scene file path
-OUTPUT_DIR = "./output/temp"
+OUTPUT_DIR = "./output/temp1"
 MODELS_INFO_FILE_PATH = "./models/models_info_test.xlsx"
 LOG_FILE_PATH = "./dataset_generation.log"
 ITERATIONS = 5
@@ -34,7 +34,7 @@ RESOLUTION_WIDTH = 512
 RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
-SEED = 1713104701
+SEED = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,18 +80,22 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
     Returns:
         tuple[list[bproc.types.MeshObject], bproc.types.Light]: a tuple of (surfaces list, light).
     """
+    # get surfaces on which objects will be placed
+    surfaces: list[bproc.types.MeshObject] = bproc.filter.by_attr(entities, "name", "^surface.*", regex=True)
+    for surface in surfaces:
+        surface.enable_rigidbody(True, friction=1)
+        surface.blender_obj.hide_render = True
+        surface.blender_obj.hide_viewport = True
+
     # set up background
     for entity in entities:
         entity.set_cp("obj_id", None)
         entity.set_cp("scene_id", 255)
-        if type(entity) == bproc.types.MeshObject and entity.has_rigidbody_enabled():
-            entity.disable_rigidbody()
-
-    # get surfaces on which objects will be placed
-    surfaces: list[bproc.types.MeshObject] = bproc.filter.by_attr(entities, "name", "^surface.*", regex=True)
-    for surface in surfaces:
-        surface.hide(True)
-        surface.enable_rigidbody(True, friction=1)
+        if type(entity) == bproc.types.MeshObject and entity not in surfaces:
+            # disable rigidbody for background objects
+            entity.disable_rigidbody() if entity.has_rigidbody_enabled() else None
+            # hide background objects in viewport to speed up ray_cast
+            entity.blender_obj.hide_viewport = True
 
     # set up area light
     area_light_data = bpy.data.lights.new(name="area_light", type="AREA")
@@ -118,7 +122,7 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
     bpy.context.scene.render.use_simplify = True
     bpy.context.scene.cycles.texture_limit_render = "2048"
     # persistent data
-    bpy.context.scene.render.use_persistent_data = False
+    bpy.context.scene.render.use_persistent_data = True
 
     return surfaces, point_light
 
@@ -138,7 +142,8 @@ def load_objects(obj_dir: str) -> list[bproc.types.MeshObject]:
     for i, obj in enumerate(active_objs):
         obj.set_origin(mode="CENTER_OF_MASS")
         obj.set_location([0, 0, 5])
-        obj.hide(True)
+        obj.blender_obj.hide_render = True
+        obj.blender_obj.hide_viewport = True
 
     return active_objs
 
@@ -158,12 +163,13 @@ def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshOb
         selected_obj: bproc.types.MeshObject = bproc.filter.one_by_cp(active_objs, "obj_id", obj_name).duplicate()
         selected_obj.set_cp("coordinate", scene_graph.objectNodes[j].coordinate)
         selected_obj.set_cp("scene_id", j)
+        selected_obj.blender_obj.hide_render = False
+        selected_obj.blender_obj.hide_viewport = False
         selected_obj.enable_rigidbody(True, friction=1)
-        selected_obj.hide(False)
         selected_objs.append(selected_obj)
 
     surface: bproc.types.MeshObject = np.random.choice(surfaces)
-    # TODO: seed not working
+    surface.blender_obj.hide_viewport = False
     sampled_objs = bproc.object.sample_poses_on_surface(
         selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True
     )
@@ -173,6 +179,7 @@ def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshOb
             obj.delete(remove_all_offspring=True)
         return [], None
     bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4, check_object_interval=1)
+    surface.blender_obj.hide_viewport = True
     return sampled_objs, surface
 
 
@@ -183,7 +190,7 @@ def construct_scene_for_single_image(surface: bproc.types.MeshObject, light: bpr
     occluded_times = 0
     while retry:
         camera_location = BlenderUtils.sample_point_in_cuboid(
-            BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [1, 0, 1]), np.array([0.5, 0.2, 1])
+            BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [1, 0, 1]), np.array([1, 0.4, 2])
         )
         camera_rotation = bproc.camera.rotation_from_forward_vec(
             BlenderUtils.poi(selected_objs) - camera_location, inplane_rot=np.random.uniform(-np.pi / 12, np.pi / 12)
@@ -196,7 +203,7 @@ def construct_scene_for_single_image(surface: bproc.types.MeshObject, light: bpr
             not_in_view_times += 1
             continue
         # check if all objects are not occluded
-        all_objs_not_occluded = BlenderUtils.check_occlusion(selected_objs, 0.05, threshold=0.5)
+        all_objs_not_occluded = BlenderUtils.check_occlusion([selected_obj.blender_obj for selected_obj in selected_objs], 0.1, threshold=0.4)
         if not all_objs_not_occluded:
             retry -= 1
             occluded_times += 1
@@ -210,7 +217,7 @@ def construct_scene_for_single_image(surface: bproc.types.MeshObject, light: bpr
 
     # set light
     light_location = BlenderUtils.sample_point_in_cuboid(
-        BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [0.5, 0, 1]), np.array([0.8, 1, 0])
+        BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [0.5, 0, 1]), np.array([1.6, 2, 0])
     )
     light.set_location(light_location)
     light.set_energy(np.random.uniform(10, 150))
