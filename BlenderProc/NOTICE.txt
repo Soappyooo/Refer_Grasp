@@ -1,0 +1,4 @@
+The project of the directory of this file and its subdirectories is copied from https://github.com/DLR-RM/BlenderProc. The project is licensed under GPL v3.
+Several modifications have been made, which are listed below.
+1. file BlenderProc/blenderproc/python/object/OnSurfaceSampler.py line 63: Add surface as a parameter for sample_pose_func.
+2. file BlenderProc/blenderproc/python/renderer/RendererUtility.py line 789: set bpy.context.scene.cycles.debug_use_spatial_splits = False.

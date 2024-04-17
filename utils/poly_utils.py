@@ -1,3 +1,6 @@
+# Code copied from https://github.com/amazon-science/polygon-transformer with no modifications.
+# The code is licensed under the Apache License 2.0. License file can be found in the directory of this file.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 import re
 import numpy as np
 from itertools import groupby
