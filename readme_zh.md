@@ -5,7 +5,7 @@
 
 一个指代表达分割数据集生成引擎，能够为语言条件抓取生成合成照片和表达。基于Blender和BlenderProc。
 
-示例:
+示例:  
 ![fig1](/images/fig1.jpg "fig1")
 ![fig2](/images/fig2.jpg "fig2")
 ![fig3](/images/fig3.png "fig3")

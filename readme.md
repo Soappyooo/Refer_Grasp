@@ -5,12 +5,13 @@ English | [中文](readme_zh.md) &nbsp;
 
 A referring expression comprehension / segmentation dataset generation engine,  capable of generating synthetic photos and expressions for language-conditioned grasping. Based on Blender and BlenderProc.
 
-examples:
+examples:  
 ![fig1](/images/fig1.jpg "fig1")
 ![fig2](/images/fig2.jpg "fig2")
 ![fig3](/images/fig3.png "fig3")
 
 a conda environment is recommended for the project. Below is a guide to set up the environment for project and run the dataset generation process.
+
 ### 1. Enter project directory:
 ```bash
 cd /path/to/project
