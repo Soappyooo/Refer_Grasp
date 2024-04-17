@@ -181,7 +181,7 @@ class DatasetUtils:
                 polygons = DatasetUtils.get_polygons(segmap, expression["obj"]["scene_id"])
                 for polygon in polygons:
                     # scatter
-                    plt.scatter(polygon[:, 0, 0], polygon[:, 0, 1], s=5, color=color, alpha=0.5)
+                    plt.scatter(polygon[:, 0, 0], polygon[:, 0, 1], s=5, color="brown", alpha=0.5)
             # display text
             plt.text(
                 top_left[0] + 1,

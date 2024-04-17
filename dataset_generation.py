@@ -26,7 +26,7 @@ from utils.blender_utils import BlenderUtils
 # set parameters
 OBJ_DIR = "./models/ycb_models"  # obj files directory
 BLENDER_SCENE_FILE_PATH = "./blender_files/background.blend"  # background scene file path
-OUTPUT_DIR = "./output/temp4"
+OUTPUT_DIR = "./output/temp5"
 MODELS_INFO_FILE_PATH = "./models/models_info_test.xlsx"
 LOG_FILE_PATH = os.path.join(OUTPUT_DIR, "./dataset_generation.log")
 ITERATIONS = 5
@@ -321,7 +321,7 @@ if __name__ == "__main__":
             )
             logging.info(f"Wrote mask images: {[f'mask_{idx:08d}.png' for idx in segmaps_idxs]}")
             assert depth_idxs == colors_idxs == segmaps_idxs
-            image_indices.append(depth_idxs)
+            image_indices += depth_idxs
 
         if len(image_indices) > 0:
             logging.info(f"Iteration {i} finished with {len(image_indices)} images rendered")
