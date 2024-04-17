@@ -1,29 +1,29 @@
 <a id="top"></a>
-# Work in progress
-English | [中文](readme_zh.md) &nbsp;
+# 进行中的工作
+[English](readme.md) | 中文 &nbsp;
 [BlenderProc](https://github.com/DLR-RM/BlenderProc)
-### 1. Enter project directory:
+### 1. 进入项目目录:
 ```bash
 cd /path/to/project
 ```
-### 2. Install BlenderProc:
+### 2. 安装BlenderProc:
 ```bash
 pip install -e ./BlenderProc
 ```
-### 3. Install required packages:
+### 3. 安装所需包:
 ```bash
 blenderproc pip install pandas tqdm debugpy openpyxl
 ```
-- if error occurs, try:
+- 如果报错，尝试:
 ```bash
 python -m blenderproc pip install pandas tqdm debugpy openpyxl
 ```
-### 4. Run `dataset_generation.py`:
+### 4. 运行 `dataset_generation.py`:
 ```bash
 blenderproc run dataset_generation.py
 ```
-- if error occurs, try:
+- 如果报错，尝试:
 ```bash
 python -m blenderproc run dataset_generation.py
 ```
-[to top](#top)
+[返回顶部](#top)
