@@ -23,11 +23,12 @@ from scene_graph_generation import SceneGraph
 from utils.dataset_utils import DatasetUtils
 from utils.blender_utils import BlenderUtils
 
+# set parameters
 OBJ_DIR = "./models/ycb_models"  # obj files directory
 BLENDER_SCENE_FILE_PATH = "./blender_files/background.blend"  # background scene file path
-OUTPUT_DIR = "./output/temp1"
+OUTPUT_DIR = "./output/temp4"
 MODELS_INFO_FILE_PATH = "./models/models_info_test.xlsx"
-LOG_FILE_PATH = "./dataset_generation.log"
+LOG_FILE_PATH = os.path.join(OUTPUT_DIR, "./dataset_generation.log")
 ITERATIONS = 5
 IMAGES_PER_ITERATION = 5
 RESOLUTION_WIDTH = 512
@@ -36,6 +37,9 @@ SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
 
+# create logging directory
+if not os.path.exists(os.path.dirname(LOG_FILE_PATH)):
+    os.makedirs(os.path.dirname(LOG_FILE_PATH))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - [%(filename)s - line %(lineno)d] - %(message)s",
@@ -85,17 +89,16 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
     for surface in surfaces:
         surface.enable_rigidbody(True, friction=1)
         surface.blender_obj.hide_render = True
-        surface.blender_obj.hide_viewport = True
 
     # set up background
     for entity in entities:
         entity.set_cp("obj_id", None)
         entity.set_cp("scene_id", 255)
-        if type(entity) == bproc.types.MeshObject and entity not in surfaces:
+        # hide background objects in viewport to speed up ray_cast
+        entity.blender_obj.hide_set(True)
+        if entity not in surfaces and isinstance(entity, bproc.types.MeshObject):
             # disable rigidbody for background objects
             entity.disable_rigidbody() if entity.has_rigidbody_enabled() else None
-            # hide background objects in viewport to speed up ray_cast
-            entity.blender_obj.hide_viewport = True
 
     # set up area light
     area_light_data = bpy.data.lights.new(name="area_light", type="AREA")
@@ -110,7 +113,7 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
 
     # set up render settings
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
-    bproc.renderer.set_max_amount_of_samples(64)
+    bproc.renderer.set_max_amount_of_samples(128)
     # full global illumination
     bpy.context.scene.cycles.max_bounces = 32
     bpy.context.scene.cycles.diffuse_bounces = 32
@@ -143,7 +146,7 @@ def load_objects(obj_dir: str) -> list[bproc.types.MeshObject]:
         obj.set_origin(mode="CENTER_OF_MASS")
         obj.set_location([0, 0, 5])
         obj.blender_obj.hide_render = True
-        obj.blender_obj.hide_viewport = True
+        obj.blender_obj.hide_set(True)
 
     return active_objs
 
@@ -164,12 +167,11 @@ def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshOb
         selected_obj.set_cp("coordinate", scene_graph.objectNodes[j].coordinate)
         selected_obj.set_cp("scene_id", j)
         selected_obj.blender_obj.hide_render = False
-        selected_obj.blender_obj.hide_viewport = False
+        selected_obj.blender_obj.hide_set(False)
         selected_obj.enable_rigidbody(True, friction=1)
         selected_objs.append(selected_obj)
 
     surface: bproc.types.MeshObject = np.random.choice(surfaces)
-    surface.blender_obj.hide_viewport = False
     sampled_objs = bproc.object.sample_poses_on_surface(
         selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True
     )
@@ -179,31 +181,51 @@ def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshOb
             obj.delete(remove_all_offspring=True)
         return [], None
     bproc.object.simulate_physics_and_fix_final_poses(min_simulation_time=2, max_simulation_time=4, check_object_interval=1)
-    surface.blender_obj.hide_viewport = True
     return sampled_objs, surface
 
 
-def construct_scene_for_single_image(surface: bproc.types.MeshObject, light: bproc.types.Light, selected_objs: list[bproc.types.MeshObject]) -> bool:
+def construct_scene_for_single_image(
+    surface: bproc.types.MeshObject,
+    light: bproc.types.Light,
+    selected_objs: list[bproc.types.MeshObject],
+    background_entities: list[bproc.types.Entity],
+) -> bool:
     # sample camera pose
     retry = 50
     not_in_view_times = 0
     occluded_times = 0
     while retry:
         camera_location = BlenderUtils.sample_point_in_cuboid(
-            BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [1, 0, 1]), np.array([1, 0.4, 2])
+            BlenderUtils.add_relative_translation_to_matrix(np.array(surface.blender_obj.matrix_world), [0.45, 0, 0.6]), np.array([0.3, 0.3, 0.8])
         )
         camera_rotation = bproc.camera.rotation_from_forward_vec(
             BlenderUtils.poi(selected_objs) - camera_location, inplane_rot=np.random.uniform(-np.pi / 12, np.pi / 12)
         )
         bproc.camera.add_camera_pose(bproc.math.build_transformation_mat(camera_location, camera_rotation), frame=0)
         # check if all objects are in view
-        all_objs_in_view = BlenderUtils.check_in_view([obj.get_location() for obj in selected_objs])
-        if not all_objs_in_view:
+        # all_objs_in_view = BlenderUtils.check_in_view([obj.get_location() for obj in selected_objs])
+        if not BlenderUtils.check_points_in_view([obj.get_location() for obj in selected_objs]):
             retry -= 1
             not_in_view_times += 1
             continue
         # check if all objects are not occluded
-        all_objs_not_occluded = BlenderUtils.check_occlusion([selected_obj.blender_obj for selected_obj in selected_objs], 0.1, threshold=0.4)
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        # rough check
+        for entity in background_entities:
+            entity.blender_obj.hide_set(False)
+        all_objs_not_occluded_rough = BlenderUtils.check_occlusion_rough(
+            [selected_obj.blender_obj for selected_obj in selected_objs], depsgraph=depsgraph
+        )
+        for entity in background_entities:
+            entity.blender_obj.hide_set(True)
+        if not all_objs_not_occluded_rough:
+            retry -= 1
+            occluded_times += 1
+            continue
+        # fine check
+        all_objs_not_occluded = BlenderUtils.check_occlusion(
+            [selected_obj.blender_obj for selected_obj in selected_objs], 0.1, threshold=0.4, depsgraph=depsgraph
+        )
         if not all_objs_not_occluded:
             retry -= 1
             occluded_times += 1
@@ -231,6 +253,12 @@ def construct_scene_for_single_image(surface: bproc.types.MeshObject, light: bpr
 
 if __name__ == "__main__":
     logging.info("Started")
+    logging.info(
+        f"Parameters: OBJ_DIR={os.path.abspath(OBJ_DIR)}, BLENDER_SCENE_FILE_PATH={os.path.abspath(BLENDER_SCENE_FILE_PATH)}, OUTPUT_DIR={os.path.abspath(OUTPUT_DIR)}, "
+        f"MODELS_INFO_FILE_PATH={os.path.abspath(MODELS_INFO_FILE_PATH)}, LOG_FILE_PATH={os.path.abspath(LOG_FILE_PATH)}, ITERATIONS={ITERATIONS}, "
+        f"IMAGES_PER_ITERATION={IMAGES_PER_ITERATION}, RESOLUTION_WIDTH={RESOLUTION_WIDTH}, RESOLUTION_HEIGHT={RESOLUTION_HEIGHT}, "
+        f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}"
+    )
     start_time = time.time()
     # * Check file nums in output_dir
     if not DatasetUtils.check_image_file_nums(OUTPUT_DIR, ["depth", "rgb", "mask"]):
@@ -270,7 +298,7 @@ if __name__ == "__main__":
         for image_index in range(IMAGES_PER_ITERATION):
             bproc.utility.reset_keyframes()
             # sample camera pose, light and background material
-            render_flag = construct_scene_for_single_image(surface, light, placed_objects)
+            render_flag = construct_scene_for_single_image(surface, light, placed_objects, background_entities)
             if not render_flag:
                 break
             logging.info(f"Constructed scene for image ({image_index + 1}/{IMAGES_PER_ITERATION})")

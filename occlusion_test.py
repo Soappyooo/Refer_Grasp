@@ -159,12 +159,33 @@ def check_occlusion_new(objs_to_check: list[bpy.types.Object], res_ratio: float,
     return True
 
 
+def check_occlusion_rough(objs_to_check: list[bpy.types.Object]) -> bool:
+    """
+    Check if anything is occluding the objects in the scene. Cast rays from camera to object centers, if hit anything not in `objs_to_check`, return False.
+
+    Args:
+        objs_to_check (list[bpy.types.Object]): the objects to check.
+
+    Returns:
+        bool: whether the objects are occluded or not. True if not occluded.
+    """
+    # ray cast from camera to object. If hit anything not in the list, return False
+    camera = bpy.context.scene.objects["Camera"]
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    camera_translation = camera.matrix_world.translation
+    for obj in objs_to_check:
+        is_hit, _, _, _, hit_obj, _ = bpy.context.scene.ray_cast(depsgraph, camera_translation, obj.location - camera_translation)
+        if is_hit and hit_obj not in objs_to_check:
+            return False
+    return True
+
+
 objs = [
-    bpy.data.objects["obj_000001.001"],
-    bpy.data.objects["obj_000002.001"],
-    bpy.data.objects["obj_000002.002"],
-    bpy.data.objects["obj_000003.001"],
-    bpy.data.objects["obj_000004.001"],
-    bpy.data.objects["obj_000005.001"],
+    bpy.data.objects["obj_000000"],
+    bpy.data.objects["obj_000001"],
+    bpy.data.objects["obj_000002"],
+    bpy.data.objects["obj_000003"],
+    bpy.data.objects["obj_000004"],
+    bpy.data.objects["obj_000005"],
 ]
 print(check_occlusion(objs, 0.05, 0.5))

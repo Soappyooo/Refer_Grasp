@@ -90,7 +90,9 @@ class BlenderUtils:
         return [np.array(obj.matrix_world @ Vector(corner)) for corner in obj.bound_box]
 
     @staticmethod
-    def check_occlusion(objs_to_check: list[bpy.types.Object], res_ratio: float, threshold: float = 0.4, min_hit: int = 1) -> bool:
+    def check_occlusion(
+        objs_to_check: list[bpy.types.Object], res_ratio: float, threshold: float = 0.4, min_hit: int = 1, depsgraph: bpy.types.Depsgraph = None
+    ) -> bool:
         """
         Check if the objects are occluded by other objects in the scene.
         `res_ratio` (0-1) downsamples the resolution for occlusion checking to speed up the process.
@@ -103,12 +105,14 @@ class BlenderUtils:
             threshold (float, optional): Threshold for determining occluded or not. Defaults to 0.4.
             min_hit (int, optional): Minimum number of ray hits to consider the object visible, \
             bigger means larger visible object area (with other objects not hidden). Defaults to 1.
+            depsgraph (bpy.types.Depsgraph, optional): Dependency graph. Defaults to None.
 
         Returns:
-            bool: whether the objects are occluded or not.
+            bool: whether the objects are occluded or not. True if not occluded.
         """
         camera = bpy.context.scene.objects["Camera"]
-        depsgraph = bpy.context.evaluated_depsgraph_get()
+        if depsgraph is None:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
         top_right, _, bottom_left, top_left = camera.data.view_frame(scene=bpy.context.scene)
         camera_quaternion = camera.matrix_world.to_quaternion()
         camera_translation = camera.matrix_world.translation
@@ -190,7 +194,9 @@ class BlenderUtils:
         return True
 
     @staticmethod
-    def check_occlusion_deprecated(objs_to_check: list[bpy.types.Object], res_ratio: float, threshold: float = 0.4, min_hit: int = 1) -> bool:
+    def check_occlusion_deprecated(
+        objs_to_check: list[bpy.types.Object], res_ratio: float, threshold: float = 0.4, min_hit: int = 1, depsgraph: bpy.types.Depsgraph = None
+    ) -> bool:
         """
         Check if the objects are occluded by other objects in the scene.
         `res_ratio` (0-1) downsamples the resolution for occlusion checking to speed up the process.
@@ -203,14 +209,16 @@ class BlenderUtils:
             threshold (float, optional): Threshold for determining occluded or not. Defaults to 0.4.
             min_hit (int, optional): Minimum number of ray hits to consider the object visible, \
             bigger means larger visible object area (with other objects not hidden). Defaults to 1.
+            depsgraph (bpy.types.Depsgraph, optional): Dependency graph. Defaults to None.
 
         Returns:
-            bool: whether the objects are occluded or not.
+            bool: whether the objects are occluded or not. True if not occluded.
         """
         # TODO: change objects to fasten ray_cast
         areas_with_occlusion = {}
         areas_without_occlusion = {}
-        depsgraph = bpy.context.evaluated_depsgraph_get()
+        if depsgraph is None:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
         camera = bpy.context.scene.objects["Camera"]
         top_right, _, bottom_left, top_left = camera.data.view_frame(scene=bpy.context.scene)
         camera_quaternion = camera.matrix_world.to_quaternion()
@@ -260,7 +268,30 @@ class BlenderUtils:
         return True
 
     @staticmethod
-    def check_in_view(points: list[np.ndarray], max_distance: float = 10) -> bool:
+    def check_occlusion_rough(objs_to_check: list[bpy.types.Object], depsgraph: bpy.types.Depsgraph = None) -> bool:
+        """
+        Check if anything is occluding the objects in the scene. Cast rays from camera to object centers, if hit anything not in `objs_to_check`, return False.
+
+        Args:
+            objs_to_check (list[bpy.types.Object]): the objects to check.
+            depsgraph (bpy.types.Depsgraph, optional): Dependency graph. Defaults to None.
+
+        Returns:
+            bool: whether the objects are occluded or not. True if not occluded.
+        """
+        # ray cast from camera to object. If hit anything not in the list, return False
+        camera = bpy.context.scene.objects["Camera"]
+        if depsgraph is None:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+        camera_translation = camera.matrix_world.translation
+        for obj in objs_to_check:
+            is_hit, _, _, _, hit_obj, _ = bpy.context.scene.ray_cast(depsgraph, camera_translation, obj.matrix_world.translation - camera_translation)
+            if is_hit and hit_obj not in objs_to_check:
+                return False
+        return True
+
+    @staticmethod
+    def check_points_in_view(points: list[np.ndarray], max_distance: float = 10) -> bool:
         """
         Check if the points are in the camera view.
 
