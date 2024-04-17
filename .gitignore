@@ -12,3 +12,5 @@
 /*.txt
 *.pyc
 /*.log
+/*debug*
+/*test*
