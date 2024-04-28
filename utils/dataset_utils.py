@@ -21,6 +21,25 @@ class DatasetUtils:
         jpeg_quality: int = 80,
         png_compression: int = 9,
     ) -> list[int]:
+        """
+        Write images to `save_path` with `file_name_prefix` and return the index of the images.
+
+        Args:
+            data (dict[str, Union[list[np.ndarray], np.ndarray]]): The data to be written.
+            save_path (str): The path of folder to save the images.
+            key (str): The key of the data to be written. Supported keys are "colors", "depth" and "scene_id_segmaps".
+            file_name_prefix (str, optional): Prefix of image file names. Defaults to None.
+            append_to_exsiting_file (bool, optional): Append new images to existing file if True, delete existing files if False. Defaults to True.
+            jpeg_quality (int, optional): JPEG quality (0-100), higher the better quality. Defaults to 80.
+            png_compression (int, optional): Compression rate of PNG files. Defaults to 9.
+
+        Raises:
+            Exception: If failed to write image.
+            ValueError: If the key is not supported.
+
+        Returns:
+            list[int]: The index of the images.
+        """
         # create directory if not exists
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -73,7 +92,19 @@ class DatasetUtils:
         return list(range(num_existing_files, num_existing_files + len(data[key])))
 
     @staticmethod
-    def write_expressions(img_idxs: list[int], expressions: dict, save_path: str, file_name_prefix: str = None) -> int:
+    def write_expressions(img_idxs: list[int], expressions: list, save_path: str, file_name_prefix: str = None) -> int:
+        """
+        Write expressions to `save_path` with `file_name_prefix` and return the index of the expressions.
+
+        Args:
+            img_idxs (list[int]): Indices of the images w.r.t. the expressions.
+            expressions (list): The expressions to be written.
+            save_path (str): The path of folder to save the expressions.
+            file_name_prefix (str, optional): File name prefix. Defaults to None.
+
+        Returns:
+            int: The index of the expressions.
+        """
         # create directory if not exists
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -85,7 +116,22 @@ class DatasetUtils:
         return num_existing_files
 
     @staticmethod
-    def merge_expressions(save_path: str, temp_path: str, file_name: str = "expressions.json", delete_temp: bool = True) -> int:
+    def merge_expressions(
+        save_path: str, temp_path: str, file_name: str = "expressions.json", delete_temp: bool = True, num_files: int = None
+    ) -> int:
+        """
+        Merge expressions from `temp_path` to `save_path` and return the number of expressions.
+
+        Args:
+            save_path (str): The path of folder to save the merged expressions.
+            temp_path (str): The path of folder of the temporary expressions to be merged.
+            file_name (str, optional): File name of the new merged json. Defaults to "expressions.json".
+            delete_temp (bool, optional): Delete merged temp jsons. Defaults to True.
+            num_files (int, optional): Number of temp json files to merge, usually 1 temp json for 1 iteration. Defaults to None.
+
+        Returns:
+            int: The number of expressions after merge.
+        """
         if not os.path.exists(save_path):
             os.makedirs(save_path)
         # create empty json list if not exists
@@ -95,7 +141,13 @@ class DatasetUtils:
         # add jsons from temp_path to the save_path json
         with open(os.path.join(save_path, file_name), "r") as f:
             expressions = json.load(f)
-        for file_to_merge in os.listdir(temp_path):
+        # if num_files is not None, only merge the last num_files files
+        if num_files is not None:
+            files_to_merge = sorted(os.listdir(temp_path))[-num_files:]
+        else:
+            files_to_merge = os.listdir(temp_path)
+
+        for file_to_merge in files_to_merge:
             with open(os.path.join(temp_path, file_to_merge), "r") as f:
                 expressions_to_merge = json.load(f)
             expressions.append(expressions_to_merge)
@@ -104,13 +156,23 @@ class DatasetUtils:
             json.dump(expressions, f)
         # delete temp_path
         if delete_temp:
-            for file_to_delete in os.listdir(temp_path):
+            for file_to_delete in files_to_merge:
                 os.remove(os.path.join(temp_path, file_to_delete))
             os.rmdir(temp_path)
         return len(expressions)
 
     @staticmethod
     def check_image_file_nums(base_path: str, folder_names: list[str]) -> bool:
+        """
+        Check if all folders have the same number of files.
+
+        Args:
+            base_path (str): The base path of the folders.
+            folder_names (list[str]): The names of the folders. Folders to check are `base_path/folder_names[i]`.
+
+        Returns:
+            bool: True if all folders have the same number of files, False otherwise.
+        """
         # check if all folders have the same number of files
         num_files = []
         for folder_name in folder_names:
@@ -136,6 +198,21 @@ class DatasetUtils:
         save_path: str = None,
         expression_json_temp: list = None,
     ) -> None:
+        """
+        Visualize the image with expressions.
+
+        Args:
+            rgb_img_path (str): The file path of the rgb image.
+            segmap_path (str): The file path of the segmentation mask image.
+            expressions_json_path (str): The file path of the expressions json.
+            display_bbox (bool, optional): Display bound box if True. Defaults to True.
+            display_mask (bool, optional): Display mask if True. Defaults to True.
+            display_polygon (bool, optional): Display polygon dots if True. Defaults to True.
+            show_image (bool, optional): Show image if True. Defaults to True.
+            save_image (bool, optional): Save image if True. Defaults to False.
+            save_path (str, optional): The folder path to save the image. Defaults to None.
+            expression_json_temp (list, optional): Temporary expressions json. Pass in `[]` may speed up for large json file in a loop. Defaults to None.
+        """
         # get img index from rgb_img_path like ./output/rgb/rgb_00000001.jpg
         img_idx = int(rgb_img_path.split("_")[-1].split(".")[0])
         # retrive expressions of img_idx
@@ -214,6 +291,16 @@ class DatasetUtils:
 
     @staticmethod
     def get_bound_box(mask: np.ndarray, poi_idx: int) -> tuple[tuple[int, int], tuple[int, int]]:
+        """
+        Get bound box of a mask.
+
+        Args:
+            mask (np.ndarray): The mask image.
+            poi_idx (int): The index of the mask of interest.
+
+        Returns:
+            tuple[tuple[int, int], tuple[int, int]]: The top left and bottom right points of the bound box.
+        """
         # get bound box of a mask
         # mask: (H,W)
         # poi_idx: index of point of interest
@@ -235,13 +322,33 @@ class DatasetUtils:
 
     @staticmethod
     def get_polygons(mask: np.ndarray, poi_idx: int) -> list[np.ndarray]:
+        """
+        Get polygons from a mask.
+
+        Args:
+            mask (np.ndarray): The mask image.
+            poi_idx (int): The index of the mask of interest.
+
+        Returns:
+            list[np.ndarray]: The polygon points (outer contour) of the mask of interest. May contain multiple objects.
+        """
         polygons = cv2.findContours((mask == poi_idx).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)[0]
         return polygons
 
     @staticmethod
     def generate_tsv_file_for_REC(
-        tsv_path: str, dataset_path: str, tsv_filename: str = None, expression_json_temp: list = None, shuffle: bool = True
+        tsv_path: str, dataset_path: str, tsv_filename: str = "rec.tsv", expression_json_temp: list = None, shuffle: bool = True
     ) -> None:
+        """
+        Generate tsv file for REC model.
+
+        Args:
+            tsv_path (str): The folder path of the tsv file to write.
+            dataset_path (str): The path of the dataset.
+            tsv_filename (str, optional): The file name of the tsv file. Defaults to "rec.tsv".
+            expression_json_temp (list, optional): Temporary expressions json. Defaults to None.
+            shuffle (bool, optional): Shuffle the lines if True. Defaults to True.
+        """
         if expression_json_temp is not None and expression_json_temp != []:
             expressions = expression_json_temp
         else:
@@ -267,15 +374,23 @@ class DatasetUtils:
         # makedir if necessary and write tsv file
         if not os.path.exists(tsv_path):
             os.makedirs(tsv_path)
-        if tsv_filename is None:
-            tsv_filename = "train_shuffled.tsv"
         with open(os.path.join(tsv_path, tsv_filename), "w") as f:
             f.writelines(lines)
 
     @staticmethod
     def generate_tsv_file_for_RES(
-        tsv_path: str, dataset_path: str, tsv_filename: str = None, expression_json_temp: list = None, shuffle: bool = True
+        tsv_path: str, dataset_path: str, tsv_filename: str = "res.tsv", expression_json_temp: list = None, shuffle: bool = True
     ) -> None:
+        """
+        Generate tsv file for RES model.
+
+        Args:
+            tsv_path (str): The folder path of the tsv file to write.
+            dataset_path (str): The path of the dataset.
+            tsv_filename (str, optional): The file name of the tsv file. Defaults to "res.tsv".
+            expression_json_temp (list, optional): Temporary expressions json. Defaults to None.
+            shuffle (bool, optional): Shuffle the lines if True. Defaults to True.
+        """
         if expression_json_temp is not None and expression_json_temp != []:
             expressions = expression_json_temp
         else:
@@ -324,8 +439,6 @@ class DatasetUtils:
         # makedir if necessary and write tsv file
         if not os.path.exists(tsv_path):
             os.makedirs(tsv_path)
-        if tsv_filename is None:
-            tsv_filename = "train_shuffled.tsv"
         with open(os.path.join(tsv_path, tsv_filename), "w") as f:
             f.writelines(lines)
 

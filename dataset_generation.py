@@ -7,6 +7,7 @@ import bpy
 from mathutils import Vector
 import logging
 import random
+from tqdm import tqdm
 
 # import debugpy
 
@@ -15,39 +16,40 @@ import random
 # debugpy.breakpoint()
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-# for debugging
-sys.path.append(os.getcwd())
+# for blender debugging
+# sys.path.append(os.getcwd())
 ###
 
-from scene_graph_generation import SceneGraph
+from core.scene_graph import SceneGraph
 from utils.dataset_utils import DatasetUtils
 from utils.blender_utils import BlenderUtils
 
 # set parameters
-OBJ_DIR = "./models/ycb_models"  # obj files directory
-BLENDER_SCENE_FILE_PATH = "./blender_files/background.blend"  # background scene file path
-OUTPUT_DIR = "./output/temp5"
-MODELS_INFO_FILE_PATH = "./models/models_info_test.xlsx"
-LOG_FILE_PATH = os.path.join(OUTPUT_DIR, "./dataset_generation.log")
-ITERATIONS = 5
+OBJ_DIR = os.path.abspath("./models/models_renamed")  # obj files directory
+BLENDER_SCENE_FILE_PATH = os.path.abspath("./blender_files/background.blend")  # background scene file path
+OUTPUT_DIR = os.path.abspath("./output/temp8")
+MODELS_INFO_FILE_PATH = os.path.abspath("./models/models_info_all.xlsx")
+LOG_FILE_PATH = os.path.abspath(os.path.join(OUTPUT_DIR, "./dataset_generation.log"))
+ITERATIONS = 10
 IMAGES_PER_ITERATION = 5
 RESOLUTION_WIDTH = 512
 RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
+PERSISITENT_DATA_CLEANUP_INTERVAL = 7
 
 # create logging directory
 if not os.path.exists(os.path.dirname(LOG_FILE_PATH)):
     os.makedirs(os.path.dirname(LOG_FILE_PATH))
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - [%(filename)s - line %(lineno)d] - %(message)s",
+    format="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     filename=LOG_FILE_PATH,
     filemode="w",
 )
-formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - [%(filename)s - line %(lineno)d] - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 stream_handler = logging.StreamHandler(sys.stdout)
 stream_handler.setFormatter(formatter)
 stream_handler.setLevel(logging.INFO)
@@ -55,6 +57,13 @@ logging.getLogger().addHandler(stream_handler)
 
 
 def sample_pose(obj: bproc.types.MeshObject, surface: bproc.types.MeshObject):
+    """
+    Sample a random pose for the object on the surface according to its coordinate in the scene graph.
+
+    Args:
+        obj (bproc.types.MeshObject): The object to be placed.
+        surface (bproc.types.MeshObject): The surface on which the object will be placed.
+    """
     surface_bbox_cords = BlenderUtils.get_bound_box_local_coordinates(surface.blender_obj)
     x0, y0, z0 = surface_bbox_cords[0]
     l, w, _ = surface.blender_obj.dimensions
@@ -102,7 +111,7 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
 
     # set up area light
     area_light_data = bpy.data.lights.new(name="area_light", type="AREA")
-    area_light_data.energy = 50
+    area_light_data.energy = 100
     area_light_data.size = 20
     area_light_obj = bpy.data.objects.new(name="area_light", object_data=area_light_data)
     area_light_obj.location = (0, 0, 3)
@@ -131,15 +140,24 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
 
 
 def load_objects(obj_dir: str) -> list[bproc.types.MeshObject]:
+    """
+    Load objects from the obj files in the obj_dir and set up properties for rendering.
+
+    Args:
+        obj_dir (str): The directory containing the obj files.
+
+    Returns:
+        list[bproc.types.MeshObject]: a list of loaded objects.
+    """
     active_objs: list[bproc.types.MeshObject] = []
     for file_name in os.listdir(obj_dir):
         if file_name.endswith(".obj"):
-            obj = bproc.loader.load_obj(os.path.join(obj_dir, file_name), use_legacy_obj_import=True)[0]
+            obj = bproc.loader.load_obj(os.path.join(obj_dir, file_name))[0]
             active_objs.append(obj)
             obj.set_cp("obj_id", file_name.split(".")[0])  # should be like obj_000001
-        #######
-        if len(active_objs) > 5:
-            break
+        ####### for debugging
+        # if len(active_objs) > 5:
+        #     break
         #######
 
     for i, obj in enumerate(active_objs):
@@ -156,15 +174,28 @@ def set_random_background(background_obj_names: list[str]):
         BlenderUtils.set_random_material(bpy.data.objects[obj_name])
 
 
-def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshObject], surfaces: list[bproc.types.MeshObject]):
-    while scene_graph.CreateScene(6) is False:
+def sample_objects(
+    scene_graph: SceneGraph, active_objs: list[bproc.types.MeshObject], surfaces: list[bproc.types.MeshObject]
+) -> tuple[list[bproc.types.MeshObject], bproc.types.MeshObject]:
+    """
+    Place objects in the scene according to the scene graph.
+
+    Args:
+        scene_graph (SceneGraph): The scene graph containing the objects and their coordinates.
+        active_objs (list[bproc.types.MeshObject]): The objects to be placed.
+        surfaces (list[bproc.types.MeshObject]): The surfaces on which the objects will be placed.
+
+    Returns:
+        tuple[list[bproc.types.MeshObject], bproc.types.MeshObject]: a tuple of (sampled objects, surface).
+    """
+    while scene_graph.create_scene(6) is False:
         continue
-    obj_names = [objectNode.obj_id for objectNode in scene_graph.objectNodes]
+    obj_names = [objectNode.obj_id for objectNode in scene_graph.object_nodes]
     selected_objs: list[bproc.types.MeshObject] = []
     # copy objects in scene graph
     for j, obj_name in enumerate(obj_names):
         selected_obj: bproc.types.MeshObject = bproc.filter.one_by_cp(active_objs, "obj_id", obj_name).duplicate()
-        selected_obj.set_cp("coordinate", scene_graph.objectNodes[j].coordinate)
+        selected_obj.set_cp("coordinate", scene_graph.object_nodes[j].coordinate)
         selected_obj.set_cp("scene_id", j)
         selected_obj.blender_obj.hide_render = False
         selected_obj.blender_obj.hide_set(False)
@@ -173,7 +204,7 @@ def sample_objects(scene_graph: SceneGraph, active_objs: list[bproc.types.MeshOb
 
     surface: bproc.types.MeshObject = np.random.choice(surfaces)
     sampled_objs = bproc.object.sample_poses_on_surface(
-        selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True
+        selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True, max_tries=20
     )
     if not len(sampled_objs) == len(selected_objs):
         logging.warning("Some objects cannot be placed in scene, skip this scene")
@@ -190,6 +221,18 @@ def construct_scene_for_single_image(
     selected_objs: list[bproc.types.MeshObject],
     background_entities: list[bproc.types.Entity],
 ) -> bool:
+    """
+    Construct the scene for a single image. Sample camera pose, light and background material.
+
+    Args:
+        surface (bproc.types.MeshObject): The surface on which the objects are placed. Used for setting up camera and light pose.
+        light (bproc.types.Light): The light in the scene.
+        selected_objs (list[bproc.types.MeshObject]): The objects which have been placed in the scene.
+        background_entities (list[bproc.types.Entity]): The background entities.
+
+    Returns:
+        bool: True if the scene is successfully constructed, False otherwise.
+    """
     # sample camera pose
     retry = 50
     not_in_view_times = 0
@@ -202,6 +245,8 @@ def construct_scene_for_single_image(
             BlenderUtils.poi(selected_objs) - camera_location, inplane_rot=np.random.uniform(-np.pi / 12, np.pi / 12)
         )
         bproc.camera.add_camera_pose(bproc.math.build_transformation_mat(camera_location, camera_rotation), frame=0)
+        # sample camera focal length
+        bpy.context.scene.camera.data.angle = np.random.uniform(0.7, 1.1)
         # check if all objects are in view
         # all_objs_in_view = BlenderUtils.check_in_view([obj.get_location() for obj in selected_objs])
         if not BlenderUtils.check_points_in_view([obj.get_location() for obj in selected_objs]):
@@ -257,7 +302,7 @@ if __name__ == "__main__":
         f"Parameters: OBJ_DIR={os.path.abspath(OBJ_DIR)}, BLENDER_SCENE_FILE_PATH={os.path.abspath(BLENDER_SCENE_FILE_PATH)}, OUTPUT_DIR={os.path.abspath(OUTPUT_DIR)}, "
         f"MODELS_INFO_FILE_PATH={os.path.abspath(MODELS_INFO_FILE_PATH)}, LOG_FILE_PATH={os.path.abspath(LOG_FILE_PATH)}, ITERATIONS={ITERATIONS}, "
         f"IMAGES_PER_ITERATION={IMAGES_PER_ITERATION}, RESOLUTION_WIDTH={RESOLUTION_WIDTH}, RESOLUTION_HEIGHT={RESOLUTION_HEIGHT}, "
-        f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}"
+        f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}, PERSISITENT_DATA_CLEANUP_INTERVAL={PERSISITENT_DATA_CLEANUP_INTERVAL}"
     )
     start_time = time.time()
     # * Check file nums in output_dir
@@ -277,12 +322,18 @@ if __name__ == "__main__":
 
     # * Initialize scene graph
     scene_graph = SceneGraph((SCENE_GRAPH_ROWS, SCENE_GRAPH_COLS))
-    scene_graph.LoadModelsInfo(MODELS_INFO_FILE_PATH)
+    scene_graph.load_objects_info(MODELS_INFO_FILE_PATH)
     logging.info("Scene graph initialized")
 
     # * Dataset generation
+    pbar = tqdm(total=ITERATIONS, ncols=80, desc="Progress")
     i = 0
     while i < ITERATIONS:
+        if i % PERSISITENT_DATA_CLEANUP_INTERVAL == 0:
+            # clear persistent data may speed up rendering for large dataset generation
+            bpy.context.scene.render.use_persistent_data = False
+            bpy.context.scene.render.use_persistent_data = True
+            logging.info(f"Cleaned up persistent data at iteration {i}")
         random_seed = int(time.time()) if SEED is None else SEED
         np.random.seed(random_seed)
         random.seed(random_seed)
@@ -327,25 +378,34 @@ if __name__ == "__main__":
             logging.info(f"Iteration {i} finished with {len(image_indices)} images rendered")
             # write expressions
             expressions = []
-            for j, expression in enumerate(scene_graph.GetComplexReferringExpressions()):
-                node = list(scene_graph.referringExpressionStructures.keys())[j]
-                obj_id = int(node.obj_id.split("_")[1])
+            for j, expression in enumerate(scene_graph.get_complex_referring_expressions()):
+                node = list(scene_graph.expression_structures.keys())[j]
+                # obj_id = int(node.obj_id.split("_")[1])
+                obj_id = node.obj_id
                 expressions.append({"obj": {"id": obj_id, "scene_id": node.scene_id}, "expression": expression})
             expressions_idx = DatasetUtils.write_expressions(
                 image_indices, expressions, save_path=os.path.join(OUTPUT_DIR, "expressions"), file_name_prefix="expressions"
             )
             logging.info(f"Wrote expressions json: expressions_{expressions_idx:08d}.json")
+            # write scene graph
+            scene_graph_idx = SceneGraph.write_scene_graph_to_file(scene_graph, os.path.join(OUTPUT_DIR, "scene_graphs"), "scene_graph")
+            logging.info(f"Wrote scene graph json: scene_graph_{scene_graph_idx:08d}.json")
             i += 1
+            pbar.update(1)
+            logging.info(str(pbar))
         else:
             logging.warning(f"No images rendered for iteration {i}, restart iteration")
         # clean up
         for obj in placed_objects:
             obj.delete(remove_all_offspring=True)
+    pbar.close()
     logging.info("Dataset generation finished")
 
     # * Merge expressions
-    num_expressions = DatasetUtils.merge_expressions(os.path.join(OUTPUT_DIR), os.path.join(OUTPUT_DIR, "expressions"))
-    logging.info(f"Merged expressions jsons ({num_expressions} scenes)")
+    num_expressions = DatasetUtils.merge_expressions(
+        os.path.join(OUTPUT_DIR), os.path.join(OUTPUT_DIR, "expressions"), delete_temp=False, num_files=ITERATIONS
+    )
+    logging.info(f"Merged expressions jsons ({num_expressions} scenes total)")
     # calculate time H:M:S
     logging.info(f"Total time taken: {time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))}")
     logging.info(f"Process finished with {i} successful iterations, see {os.path.abspath(LOG_FILE_PATH)} for details")
