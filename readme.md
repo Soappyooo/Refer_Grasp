@@ -12,15 +12,27 @@ examples:
 
 a conda environment is recommended for the project. Below is a guide to set up the environment for project and run the dataset generation process.
 
-### 1. Enter project directory:
+### 1. Clone the project:
 ```bash
 cd /path/to/project
+mkdir RefGrasp && cd RefGrasp
+git clone https://github.com/Soappyooo/Refer_Grasp.git .
 ```
+
+### 2. Create a conda environment:
+```bash
+conda create -n refgrasp python==3.10.13
+conda activate refgrasp
+pip install -r requirements.txt
+```
+
+
 ### 2. Install BlenderProc:
 ```bash
 pip install -e ./BlenderProc
 ```
 ### 3. Install required packages:
+It may take a while to install the packages as a Blender 3.5 would be installed first.
 ```bash
 blenderproc pip install pandas tqdm debugpy openpyxl
 ```
