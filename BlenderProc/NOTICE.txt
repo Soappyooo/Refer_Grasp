@@ -2,3 +2,4 @@ The project of the directory of this file and its subdirectories is copied from 
 Several modifications have been made, which are listed below.
 1. file BlenderProc/blenderproc/python/object/OnSurfaceSampler.py line 63: Add surface as a parameter for sample_pose_func.
 2. file BlenderProc/blenderproc/python/renderer/RendererUtility.py line 789: set bpy.context.scene.cycles.debug_use_spatial_splits = False.
+3. file BlenderProc/blenderproc/python/types/MeshObjectUtility.py line 20-22: comment out the code causing import error.
