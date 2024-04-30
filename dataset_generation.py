@@ -403,6 +403,7 @@ if __name__ == "__main__":
             logging.warning(f"Cannot place some objects in scene for iteration {i}, restart iteration")
             continue
         logging.info("Placed objects in scene")
+        sys.stdout.flush()
         # sample environment and render images
         image_indices = []
         for image_index in range(args.images_per_iteration):
@@ -417,6 +418,7 @@ if __name__ == "__main__":
             data = bproc.renderer.render()
             data["depth"] = bproc.postprocessing.add_kinect_azure_noise(data["depth"], data["colors"])
             logging.info(f"Rendered image ({image_index + 1}/{args.images_per_iteration})")
+            sys.stdout.flush()
             # write image
             depth_idxs = DatasetUtils.write_image(
                 data, os.path.join(args.output_dir, "depth"), "depth", file_name_prefix="depth", append_to_exsiting_file=True

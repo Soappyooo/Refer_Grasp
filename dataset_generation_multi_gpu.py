@@ -3,7 +3,9 @@ import argparse
 import os
 import logging
 import signal
+import sys
 from utils.dataset_utils import DatasetUtils
+
 
 # set parameters
 GPU_IDS = "0,1,2,3"  # GPU devices id used for rendering
@@ -22,6 +24,7 @@ SEED = None
 PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 16
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--gpu-ids", type=str, default=GPU_IDS, help="GPU device ids to use")
@@ -81,6 +84,7 @@ for gpu_idx in gpu_idxs:
         stderr=subprocess.DEVNULL,
     )
     processes.append(process)
+    os.set_blocking(process.stdout.fileno(), False) if os.name == "posix" else None  # windows may have blocking issue
     logger.info(f"PID: {process.pid}, GPU {gpu_idx}: started")
 
 
@@ -104,6 +108,7 @@ try:
             output = process.stdout.readline()
             if "Progress" in output and "INFO" in output:
                 logger.info(f"PID: {process.pid}, GPU {gpu_idxs[i]}: {output.rstrip().split('-')[-1]}")
+                sys.stdout.flush()
 except Exception as e:
     for process in processes:
         process.terminate()
