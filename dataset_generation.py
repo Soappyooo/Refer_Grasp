@@ -256,7 +256,7 @@ def sample_objects(
         selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True, max_tries=100
     )
     if not len(sampled_objs) == len(selected_objs):
-        logging.warning("Some objects cannot be placed in scene, skip this scene")
+        # logging.warning("Some objects cannot be placed in scene, skip this scene")
         for obj in selected_objs:
             obj.delete(remove_all_offspring=True)
         return [], None
@@ -358,7 +358,7 @@ if __name__ == "__main__":
         f"models_info_file_path={args.models_info_file_path}, log_file_path={args.log_file_path}, iterations={args.iterations}, "
         f"images_per_iteration={args.images_per_iteration}, resolution_width={args.resolution_width}, resolution_height={args.resolution_height}, "
         f"scene_graph_rows={args.scene_graph_rows}, scene_graph_cols={args.scene_graph_cols}, seed={args.seed}, "
-        f"persistent_data_cleanup_interval={args.persistent_data_cleanup_interval}"
+        f"persistent_data_cleanup_interval={args.persistent_data_cleanup_interval}, texture_limit={args.texture_limit}"
     )
     start_time = time.time()
     # * Check file nums in output_dir
@@ -417,15 +417,15 @@ if __name__ == "__main__":
             logging.info(f"Rendered image ({image_index + 1}/{args.images_per_iteration})")
             # write image
             depth_idxs = DatasetUtils.write_image(
-                data, os.path.join(OUTPUT_DIR, "depth"), "depth", file_name_prefix="depth", append_to_exsiting_file=True
+                data, os.path.join(args.output_dir, "depth"), "depth", file_name_prefix="depth", append_to_exsiting_file=True
             )
             logging.info(f"Wrote depth images: {[f'depth_{idx:08d}.png' for idx in depth_idxs]}")
             colors_idxs = DatasetUtils.write_image(
-                data, os.path.join(OUTPUT_DIR, "rgb"), "colors", file_name_prefix="rgb", append_to_exsiting_file=True
+                data, os.path.join(args.output_dir, "rgb"), "colors", file_name_prefix="rgb", append_to_exsiting_file=True
             )
             logging.info(f"Wrote rgb images: {[f'rgb_{idx:08d}.png' for idx in colors_idxs]}")
             segmaps_idxs = DatasetUtils.write_image(
-                data, os.path.join(OUTPUT_DIR, "mask"), "scene_id_segmaps", file_name_prefix="mask", append_to_exsiting_file=True
+                data, os.path.join(args.output_dir, "mask"), "scene_id_segmaps", file_name_prefix="mask", append_to_exsiting_file=True
             )
             logging.info(f"Wrote mask images: {[f'mask_{idx:08d}.png' for idx in segmaps_idxs]}")
             assert depth_idxs == colors_idxs == segmaps_idxs
@@ -441,11 +441,11 @@ if __name__ == "__main__":
                 obj_id = node.obj_id
                 expressions.append({"obj": {"id": obj_id, "scene_id": node.scene_id}, "expression": expression})
             expressions_idx = DatasetUtils.write_expressions(
-                image_indices, expressions, save_path=os.path.join(OUTPUT_DIR, "expressions"), file_name_prefix="expressions"
+                image_indices, expressions, save_path=os.path.join(args.output_dir, "expressions"), file_name_prefix="expressions"
             )
             logging.info(f"Wrote expressions json: expressions_{expressions_idx:08d}.json")
             # write scene graph
-            scene_graph_idx = SceneGraph.write_scene_graph_to_file(scene_graph, os.path.join(OUTPUT_DIR, "scene_graphs"), "scene_graph")
+            scene_graph_idx = SceneGraph.write_scene_graph_to_file(scene_graph, os.path.join(args.output_dir, "scene_graphs"), "scene_graph")
             logging.info(f"Wrote scene graph json: scene_graph_{scene_graph_idx:08d}.json")
             i += 1
             pbar.update(1)
@@ -461,7 +461,7 @@ if __name__ == "__main__":
 
     # * Merge expressions
     num_expressions = DatasetUtils.merge_expressions(
-        os.path.join(OUTPUT_DIR), os.path.join(OUTPUT_DIR, "expressions"), delete_temp=False, num_files=args.iterations
+        os.path.join(args.output_dir), os.path.join(args.output_dir, "expressions"), delete_temp=False, num_files=args.iterations
     )
     logging.info(f"Merged expressions jsons ({num_expressions} scenes total)")
     # calculate time H:M:S
