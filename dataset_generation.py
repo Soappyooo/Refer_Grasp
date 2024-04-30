@@ -30,10 +30,10 @@ from utils.blender_utils import BlenderUtils
 GPU_ID = 0  # GPU device id used for rendering
 OBJ_DIR = os.path.abspath("./models")  # obj files directory
 BLENDER_SCENE_FILE_PATH = os.path.abspath("./blender_files/background.blend")  # background scene file path
-OUTPUT_DIR = os.path.abspath("./output/temp8")
+OUTPUT_DIR = os.path.abspath("./output_demo")
 MODELS_INFO_FILE_PATH = os.path.abspath("./models/models_info_all.xlsx")
 LOG_FILE_PATH = os.path.abspath(os.path.join(OUTPUT_DIR, "./dataset_generation.log"))
-ITERATIONS = 5
+ITERATIONS = 10
 IMAGES_PER_ITERATION = 5  # total images <= IMAGES_PER_ITERATION * ITERATIONS
 RESOLUTION_WIDTH = 512
 RESOLUTION_HEIGHT = 512
@@ -42,6 +42,7 @@ SCENE_GRAPH_COLS = 4
 SEED = None
 PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
+CPU_THREADS = 0
 
 # parse arguments
 parser = argparse.ArgumentParser()
@@ -62,6 +63,7 @@ parser.add_argument(
     "--persistent-data-cleanup-interval", type=int, default=PERSISITENT_DATA_CLEANUP_INTERVAL, help="clean up persistent data interval"
 )
 parser.add_argument("--texture-limit", type=str, default=TEXTURE_LIMIT, help="texture limit")
+parser.add_argument("--cpu-threads", type=int, default=CPU_THREADS, help="CPU threads used for rendering")
 args = parser.parse_args()
 # convert path to absolute path
 args.obj_dir = os.path.abspath(args.obj_dir)
@@ -129,7 +131,7 @@ def render_settings_init():
     # set up render settings
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
     bproc.renderer.set_max_amount_of_samples(512)
-    bproc.renderer.set_cpu_threads(16)
+    bproc.renderer.set_cpu_threads(args.cpu_threads)
     RendererUtility.set_render_devices(desired_gpu_ids=[args.gpu_id])
     # set up resolution
     bpy.context.scene.render.resolution_x = args.resolution_width

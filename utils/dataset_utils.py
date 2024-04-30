@@ -8,6 +8,7 @@ from tqdm import tqdm
 import random
 from utils.poly_utils import is_clockwise, revert_direction, reorder_points, approximate_polygons, interpolate_polygons, polygons_to_string
 from typing import Union
+import shutil
 
 
 class DatasetUtils:
@@ -482,3 +483,47 @@ class DatasetUtils:
         os.rename(obj_file, os.path.join(file_folder, new_name_prefix + ".obj"))
         os.rename(mtl_file, os.path.join(file_folder, new_name_prefix + ".mtl"))
         os.rename(texture_file, os.path.join(file_folder, new_name_prefix + "." + png_or_jpg))
+
+    @staticmethod
+    def merge_datasets_from_multi_gpus(source_dirs: list[str], target_dir: str) -> None:
+        """
+        Merge datasets from multiple GPUs to a target directory.
+
+        Args:
+            source_dirs (list[str]): The list of source directories to merge.
+            target_dir (str): The target directory to save the merged dataset.
+        """
+        expressions_gathered = []
+        # create target_dir if not exists
+        for path_to_create in ["rgb", "mask", "depth"]:
+            if not os.path.exists(os.path.join(target_dir, path_to_create)):
+                os.makedirs(os.path.join(target_dir, path_to_create))
+            # delete all existing files
+            for file_name in os.listdir(os.path.join(target_dir, path_to_create)):
+                os.remove(os.path.join(target_dir, path_to_create, file_name))
+        # copy all files from source_dirs to target_dir and rename
+        img_idx_offset = 0
+        for source_dir in source_dirs:
+            # each source_dir contains rgb, mask, depth, expressions.json
+            # copy rgb, mask, depth and rename. name pattern: rgb_00000001.jpg, mask_00000001.png, depth_00000001.png
+            for sub_dir in ["rgb", "mask", "depth"]:
+                for file_name in os.listdir(os.path.join(source_dir, sub_dir)):
+                    shutil.copy(
+                        os.path.join(source_dir, sub_dir, file_name),
+                        os.path.join(
+                            target_dir,
+                            sub_dir,
+                            f"{sub_dir}_{img_idx_offset+int(file_name.split('_')[-1].split('.')[0]):08d}.{file_name.split('.')[-1]}",
+                        ),
+                    )
+            # copy expressions.json ,rename img idxs inside
+            with open(os.path.join(source_dir, "expressions.json"), "r") as f:
+                expressions = json.load(f)
+            for item in expressions:
+                # item: {"img_idxs": [1,2,3], "expressions": [{"expression": "xxx", "obj": {"scene_id": 1}}]}
+                item["img_idxs"] = [img_idx_offset + img_idx for img_idx in item["img_idxs"]]
+            expressions_gathered += expressions
+            img_idx_offset += len(os.listdir(os.path.join(source_dir, "rgb")))
+        # write expressions.json
+        with open(os.path.join(target_dir, "expressions.json"), "w") as f:
+            json.dump(expressions_gathered, f)
