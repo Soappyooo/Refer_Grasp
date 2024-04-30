@@ -1,4 +1,5 @@
 import blenderproc as bproc
+import blenderproc.python.renderer.RendererUtility as RendererUtility
 import numpy as np
 import os
 import sys
@@ -8,6 +9,7 @@ from mathutils import Vector
 import logging
 import random
 from tqdm import tqdm
+import argparse
 
 # import debugpy
 
@@ -25,28 +27,57 @@ from utils.dataset_utils import DatasetUtils
 from utils.blender_utils import BlenderUtils
 
 # set parameters
-OBJ_DIR = os.path.abspath("./models/models_renamed")  # obj files directory
+GPU_ID = 0  # GPU device id used for rendering
+OBJ_DIR = os.path.abspath("./models")  # obj files directory
 BLENDER_SCENE_FILE_PATH = os.path.abspath("./blender_files/background.blend")  # background scene file path
 OUTPUT_DIR = os.path.abspath("./output/temp8")
 MODELS_INFO_FILE_PATH = os.path.abspath("./models/models_info_all.xlsx")
 LOG_FILE_PATH = os.path.abspath(os.path.join(OUTPUT_DIR, "./dataset_generation.log"))
-ITERATIONS = 10
-IMAGES_PER_ITERATION = 5
+ITERATIONS = 5
+IMAGES_PER_ITERATION = 5  # total images <= IMAGES_PER_ITERATION * ITERATIONS
 RESOLUTION_WIDTH = 512
 RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
-PERSISITENT_DATA_CLEANUP_INTERVAL = 7
+PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
+TEXTURE_LIMIT = "2048"
 
-# create logging directory
-if not os.path.exists(os.path.dirname(LOG_FILE_PATH)):
-    os.makedirs(os.path.dirname(LOG_FILE_PATH))
+# parse arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--gpu-id", type=int, default=GPU_ID, help="GPU device id used for rendering")
+parser.add_argument("--obj-dir", type=str, default=OBJ_DIR, help="obj files directory")
+parser.add_argument("--blender-scene-file-path", type=str, default=BLENDER_SCENE_FILE_PATH, help="background scene file path")
+parser.add_argument("--output-dir", type=str, default=OUTPUT_DIR, help="output directory")
+parser.add_argument("--models-info-file-path", type=str, default=MODELS_INFO_FILE_PATH, help="models info file path")
+parser.add_argument("--log-file-path", type=str, default=LOG_FILE_PATH, help="log file path")
+parser.add_argument("--iterations", type=int, default=ITERATIONS, help="number of iterations")
+parser.add_argument("--images-per-iteration", type=int, default=IMAGES_PER_ITERATION, help="total images <= iterations * images_per_iteration")
+parser.add_argument("--resolution-width", type=int, default=RESOLUTION_WIDTH, help="render resolution width")
+parser.add_argument("--resolution-height", type=int, default=RESOLUTION_HEIGHT, help="render resolution height")
+parser.add_argument("--scene-graph-rows", type=int, default=SCENE_GRAPH_ROWS, help="scene graph rows")
+parser.add_argument("--scene-graph-cols", type=int, default=SCENE_GRAPH_COLS, help="scene graph cols")
+parser.add_argument("--seed", type=int, default=SEED, help="random seed, should not be set unless debugging")
+parser.add_argument(
+    "--persistent-data-cleanup-interval", type=int, default=PERSISITENT_DATA_CLEANUP_INTERVAL, help="clean up persistent data interval"
+)
+parser.add_argument("--texture-limit", type=str, default=TEXTURE_LIMIT, help="texture limit")
+args = parser.parse_args()
+# convert path to absolute path
+args.obj_dir = os.path.abspath(args.obj_dir)
+args.blender_scene_file_path = os.path.abspath(args.blender_scene_file_path)
+args.output_dir = os.path.abspath(args.output_dir)
+args.models_info_file_path = os.path.abspath(args.models_info_file_path)
+args.log_file_path = os.path.abspath(args.log_file_path)
+
+# create logging directory and configure logging
+if not os.path.exists(os.path.dirname(args.log_file_path)):
+    os.makedirs(os.path.dirname(args.log_file_path))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    filename=LOG_FILE_PATH,
+    filename=args.log_file_path,
     filemode="w",
 )
 formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -54,6 +85,17 @@ stream_handler = logging.StreamHandler(sys.stdout)
 stream_handler.setFormatter(formatter)
 stream_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(stream_handler)
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+
+sys.excepthook = handle_exception
 
 
 def sample_pose(obj: bproc.types.MeshObject, surface: bproc.types.MeshObject):
@@ -81,6 +123,29 @@ def sample_pose(obj: bproc.types.MeshObject, surface: bproc.types.MeshObject):
     )
     obj.set_location(obj_location_random)
     obj.set_rotation_euler(np.random.uniform([0, 0, 0], [0, 0, np.pi * 2]))
+
+
+def render_settings_init():
+    # set up render settings
+    bproc.renderer.enable_depth_output(activate_antialiasing=False)
+    bproc.renderer.set_max_amount_of_samples(512)
+    bproc.renderer.set_cpu_threads(16)
+    RendererUtility.set_render_devices(desired_gpu_ids=[args.gpu_id])
+    # set up resolution
+    bpy.context.scene.render.resolution_x = args.resolution_width
+    bpy.context.scene.render.resolution_y = args.resolution_height
+    # full global illumination
+    RendererUtility.set_light_bounces(32, 32, 32, 32, 32, 32, 32)
+    # 2k textures
+    bpy.context.scene.render.use_simplify = True
+    bpy.context.scene.cycles.texture_limit_render = args.texture_limit
+    # persistent data
+    bpy.context.scene.render.use_persistent_data = True
+    # log cpu and gpu used
+    logging.info(
+        f"CPU threads: {bpy.context.scene.render.threads}, "
+        + f"GPU devices: {bpy.context.preferences.addons['cycles'].preferences.get_devices_for_type('OPTIX')[args.gpu_id].name}"
+    )
 
 
 def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bproc.types.MeshObject], bproc.types.Light]:
@@ -119,22 +184,6 @@ def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bpro
 
     # set up point light
     point_light = bproc.types.Light(light_type="POINT", name="point_light")
-
-    # set up render settings
-    bproc.renderer.enable_depth_output(activate_antialiasing=False)
-    bproc.renderer.set_max_amount_of_samples(128)
-    # full global illumination
-    bpy.context.scene.cycles.max_bounces = 32
-    bpy.context.scene.cycles.diffuse_bounces = 32
-    bpy.context.scene.cycles.glossy_bounces = 32
-    bpy.context.scene.cycles.transmission_bounces = 32
-    bpy.context.scene.cycles.volume_bounces = 32
-    bpy.context.scene.cycles.transparent_max_bounces = 32
-    # 2k textures
-    bpy.context.scene.render.use_simplify = True
-    bpy.context.scene.cycles.texture_limit_render = "2048"
-    # persistent data
-    bpy.context.scene.render.use_persistent_data = True
 
     return surfaces, point_light
 
@@ -204,7 +253,7 @@ def sample_objects(
 
     surface: bproc.types.MeshObject = np.random.choice(surfaces)
     sampled_objs = bproc.object.sample_poses_on_surface(
-        selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True, max_tries=20
+        selected_objs, surface, sample_pose, min_distance=0.001, max_distance=10, check_all_bb_corners_over_surface=True, max_tries=100
     )
     if not len(sampled_objs) == len(selected_objs):
         logging.warning("Some objects cannot be placed in scene, skip this scene")
@@ -246,7 +295,7 @@ def construct_scene_for_single_image(
         )
         bproc.camera.add_camera_pose(bproc.math.build_transformation_mat(camera_location, camera_rotation), frame=0)
         # sample camera focal length
-        bpy.context.scene.camera.data.angle = np.random.uniform(0.7, 1.1)
+        bpy.context.scene.camera.data.angle = np.random.uniform(0.65, 1.1)
         # check if all objects are in view
         # all_objs_in_view = BlenderUtils.check_in_view([obj.get_location() for obj in selected_objs])
         if not BlenderUtils.check_points_in_view([obj.get_location() for obj in selected_objs]):
@@ -298,43 +347,51 @@ def construct_scene_for_single_image(
 
 if __name__ == "__main__":
     logging.info("Started")
+    # logging.info(
+    #     f"Parameters: OBJ_DIR={os.path.abspath(OBJ_DIR)}, BLENDER_SCENE_FILE_PATH={os.path.abspath(BLENDER_SCENE_FILE_PATH)}, OUTPUT_DIR={os.path.abspath(OUTPUT_DIR)}, "
+    #     f"MODELS_INFO_FILE_PATH={os.path.abspath(MODELS_INFO_FILE_PATH)}, LOG_FILE_PATH={os.path.abspath(LOG_FILE_PATH)}, ITERATIONS={ITERATIONS}, "
+    #     f"IMAGES_PER_ITERATION={IMAGES_PER_ITERATION}, RESOLUTION_WIDTH={RESOLUTION_WIDTH}, RESOLUTION_HEIGHT={RESOLUTION_HEIGHT}, "
+    #     f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}, PERSISITENT_DATA_CLEANUP_INTERVAL={PERSISITENT_DATA_CLEANUP_INTERVAL}"
+    # )
     logging.info(
-        f"Parameters: OBJ_DIR={os.path.abspath(OBJ_DIR)}, BLENDER_SCENE_FILE_PATH={os.path.abspath(BLENDER_SCENE_FILE_PATH)}, OUTPUT_DIR={os.path.abspath(OUTPUT_DIR)}, "
-        f"MODELS_INFO_FILE_PATH={os.path.abspath(MODELS_INFO_FILE_PATH)}, LOG_FILE_PATH={os.path.abspath(LOG_FILE_PATH)}, ITERATIONS={ITERATIONS}, "
-        f"IMAGES_PER_ITERATION={IMAGES_PER_ITERATION}, RESOLUTION_WIDTH={RESOLUTION_WIDTH}, RESOLUTION_HEIGHT={RESOLUTION_HEIGHT}, "
-        f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}, PERSISITENT_DATA_CLEANUP_INTERVAL={PERSISITENT_DATA_CLEANUP_INTERVAL}"
+        f"Parameters: obj_dir={args.obj_dir}, blender_scene_file_path={args.blender_scene_file_path}, output_dir={args.output_dir}, "
+        f"models_info_file_path={args.models_info_file_path}, log_file_path={args.log_file_path}, iterations={args.iterations}, "
+        f"images_per_iteration={args.images_per_iteration}, resolution_width={args.resolution_width}, resolution_height={args.resolution_height}, "
+        f"scene_graph_rows={args.scene_graph_rows}, scene_graph_cols={args.scene_graph_cols}, seed={args.seed}, "
+        f"persistent_data_cleanup_interval={args.persistent_data_cleanup_interval}"
     )
     start_time = time.time()
     # * Check file nums in output_dir
-    if not DatasetUtils.check_image_file_nums(OUTPUT_DIR, ["depth", "rgb", "mask"]):
+    if not DatasetUtils.check_image_file_nums(args.output_dir, ["depth", "rgb", "mask"]):
         logging.error("Image file numbers not match")
         raise Exception("Image file numbers not match")
 
     # * Initialize blenderproc & load scene
     bproc.init()
-    background_entities = bproc.loader.load_blend(BLENDER_SCENE_FILE_PATH)
+    render_settings_init()
+    background_entities = bproc.loader.load_blend(args.blender_scene_file_path)
     surfaces, light = background_scene_init(background_entities)
     logging.info("Loaded background scene")
 
     # * Load objects
-    active_objs = load_objects(OBJ_DIR)
+    active_objs = load_objects(args.obj_dir)
     logging.info("Loaded objects")
 
     # * Initialize scene graph
-    scene_graph = SceneGraph((SCENE_GRAPH_ROWS, SCENE_GRAPH_COLS))
-    scene_graph.load_objects_info(MODELS_INFO_FILE_PATH)
+    scene_graph = SceneGraph((args.scene_graph_rows, args.scene_graph_cols))
+    scene_graph.load_objects_info(args.models_info_file_path)
     logging.info("Scene graph initialized")
 
     # * Dataset generation
-    pbar = tqdm(total=ITERATIONS, ncols=80, desc="Progress")
+    pbar = tqdm(total=args.iterations, ncols=80, desc="Progress")
     i = 0
-    while i < ITERATIONS:
-        if i % PERSISITENT_DATA_CLEANUP_INTERVAL == 0:
+    while i < args.iterations:
+        if i % args.persistent_data_cleanup_interval == 0:
             # clear persistent data may speed up rendering for large dataset generation
             bpy.context.scene.render.use_persistent_data = False
             bpy.context.scene.render.use_persistent_data = True
             logging.info(f"Cleaned up persistent data at iteration {i}")
-        random_seed = int(time.time()) if SEED is None else SEED
+        random_seed = (int(time.time()) * os.getpid()) % (2**32 - 1) if args.seed is None else args.seed
         np.random.seed(random_seed)
         random.seed(random_seed)
         logging.info(f"Iteration {i} started with random seed {random_seed}")
@@ -346,18 +403,18 @@ if __name__ == "__main__":
         logging.info("Placed objects in scene")
         # sample environment and render images
         image_indices = []
-        for image_index in range(IMAGES_PER_ITERATION):
+        for image_index in range(args.images_per_iteration):
             bproc.utility.reset_keyframes()
             # sample camera pose, light and background material
             render_flag = construct_scene_for_single_image(surface, light, placed_objects, background_entities)
             if not render_flag:
                 break
-            logging.info(f"Constructed scene for image ({image_index + 1}/{IMAGES_PER_ITERATION})")
+            logging.info(f"Constructed scene for image ({image_index + 1}/{args.images_per_iteration})")
             # render image
             bproc.renderer.enable_segmentation_output(map_by=["scene_id"], default_values={"scene_id": 255})
             data = bproc.renderer.render()
             data["depth"] = bproc.postprocessing.add_kinect_azure_noise(data["depth"], data["colors"])
-            logging.info(f"Rendered image ({image_index + 1}/{IMAGES_PER_ITERATION})")
+            logging.info(f"Rendered image ({image_index + 1}/{args.images_per_iteration})")
             # write image
             depth_idxs = DatasetUtils.write_image(
                 data, os.path.join(OUTPUT_DIR, "depth"), "depth", file_name_prefix="depth", append_to_exsiting_file=True
@@ -395,6 +452,7 @@ if __name__ == "__main__":
             logging.info(str(pbar))
         else:
             logging.warning(f"No images rendered for iteration {i}, restart iteration")
+        sys.stdout.flush()
         # clean up
         for obj in placed_objects:
             obj.delete(remove_all_offspring=True)
@@ -403,9 +461,9 @@ if __name__ == "__main__":
 
     # * Merge expressions
     num_expressions = DatasetUtils.merge_expressions(
-        os.path.join(OUTPUT_DIR), os.path.join(OUTPUT_DIR, "expressions"), delete_temp=False, num_files=ITERATIONS
+        os.path.join(OUTPUT_DIR), os.path.join(OUTPUT_DIR, "expressions"), delete_temp=False, num_files=args.iterations
     )
     logging.info(f"Merged expressions jsons ({num_expressions} scenes total)")
     # calculate time H:M:S
     logging.info(f"Total time taken: {time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))}")
-    logging.info(f"Process finished with {i} successful iterations, see {os.path.abspath(LOG_FILE_PATH)} for details")
+    logging.info(f"Process finished with {i} successful iterations, see {os.path.abspath(args.log_file_path)} for details")

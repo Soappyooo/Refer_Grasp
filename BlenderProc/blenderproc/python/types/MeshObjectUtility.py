@@ -17,9 +17,9 @@ from blenderproc.python.utility.BlenderUtility import get_all_blender_mesh_objec
 from blenderproc.python.types.MaterialUtility import Material
 from blenderproc.python.material import MaterialLoaderUtility
 
-if platform != "win32":
-    # this is only supported under linux and macOS, the import itself already doesn't work under windows
-    from blenderproc.external.vhacd.decompose import convex_decomposition
+# if platform != "win32":
+#     # this is only supported under linux and macOS, the import itself already doesn't work under windows
+#     from blenderproc.external.vhacd.decompose import convex_decomposition
 
 
 class MeshObject(Entity):
