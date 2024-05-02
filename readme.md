@@ -31,7 +31,7 @@ pip install -e ./BlenderProc
 ### 4. Install required packages:
 It may take a while to install the packages as a Blender 3.5 would be installed first.
 ```bash
-python -m blenderproc pip install pandas tqdm debugpy openpyxl
+python -m blenderproc pip install pandas tqdm debugpy openpyxl psutil
 ```
 ### 5. Download models and scene:
 Download (760MB) from [Google Drive](https://drive.google.com/file/d/1tDshqp_SNw9SoH4jtoeFkZu8dhrZSY12/view?usp=sharing) or [Quark Drive](https://pan.quark.cn/s/d94083a37db0). Extract the downloaded file to the project directory. The directory structure should look like this:

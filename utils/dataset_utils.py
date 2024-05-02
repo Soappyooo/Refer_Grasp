@@ -146,7 +146,7 @@ class DatasetUtils:
         if num_files is not None:
             files_to_merge = sorted(os.listdir(temp_path))[-num_files:]
         else:
-            files_to_merge = os.listdir(temp_path)
+            files_to_merge = sorted(os.listdir(temp_path))
 
         for file_to_merge in files_to_merge:
             with open(os.path.join(temp_path, file_to_merge), "r") as f:

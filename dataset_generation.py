@@ -10,6 +10,7 @@ import logging
 import random
 from tqdm import tqdm
 import argparse
+import psutil
 
 # import debugpy
 
@@ -397,6 +398,9 @@ if __name__ == "__main__":
         np.random.seed(random_seed)
         random.seed(random_seed)
         logging.info(f"Iteration {i} started with random seed {random_seed}")
+        # log memory usage and gpu memory usage
+        logging.info(f"Memory usage: { psutil.virtual_memory().used / 1024 ** 3:.2f} GB / {psutil.virtual_memory().total / 1024 ** 3:.2f} GB")
+        logging.info(f"Swap memory usage: {psutil.swap_memory().used / 1024 ** 3:.2f} GB / {psutil.swap_memory().total / 1024 ** 3:.2f} GB")
         # place objects in scene
         placed_objects, surface = sample_objects(scene_graph, active_objs, surfaces)
         if not placed_objects:
@@ -427,7 +431,7 @@ if __name__ == "__main__":
             colors_idxs = DatasetUtils.write_image(
                 data, os.path.join(args.output_dir, "rgb"), "colors", file_name_prefix="rgb", append_to_exsiting_file=True
             )
-            logging.info(f"Wrote rgb images: {[f'rgb_{idx:08d}.png' for idx in colors_idxs]}")
+            logging.info(f"Wrote rgb images: {[f'rgb_{idx:08d}.jpg' for idx in colors_idxs]}")
             segmaps_idxs = DatasetUtils.write_image(
                 data, os.path.join(args.output_dir, "mask"), "scene_id_segmaps", file_name_prefix="mask", append_to_exsiting_file=True
             )
