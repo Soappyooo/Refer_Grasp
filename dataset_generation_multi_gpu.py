@@ -47,6 +47,8 @@ parser.add_argument("--cpu-threads", type=int, default=CPU_THREADS, help="number
 args = parser.parse_args()
 gpu_idxs: list[int] = list(map(int, args.gpu_ids.split(",")))
 log_file_path_gather = os.path.abspath(os.path.join(args.output_dir, "dataset_generation_gather.log"))
+if not os.path.exists(os.path.dirname(log_file_path_gather)):
+    os.makedirs(os.path.dirname(log_file_path_gather), exist_ok=True)
 # configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

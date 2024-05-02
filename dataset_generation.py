@@ -143,6 +143,8 @@ def render_settings_init():
     bpy.context.scene.cycles.texture_limit_render = args.texture_limit
     # persistent data
     bpy.context.scene.render.use_persistent_data = True
+    # dynamic bvh
+    bpy.context.scene.cycles.debug_bvh_type = "DYNAMIC_BVH"
     # log cpu and gpu used
     logging.info(
         f"CPU threads: {bpy.context.scene.render.threads}, "
