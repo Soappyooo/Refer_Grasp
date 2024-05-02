@@ -24,7 +24,7 @@ SEED = None
 PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 16
-
+SAMPLES = 512
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--gpu-ids", type=str, default=GPU_IDS, help="GPU device ids to use")
@@ -44,6 +44,7 @@ parser.add_argument(
 )
 parser.add_argument("--texture-limit", type=str, default=TEXTURE_LIMIT, help="texture limit")
 parser.add_argument("--cpu-threads", type=int, default=CPU_THREADS, help="number of CPU threads used in render for each subprocess")
+parser.add_argument("--samples", type=int, default=SAMPLES, help="max samples for rendering")
 args = parser.parse_args()
 gpu_idxs: list[int] = list(map(int, args.gpu_ids.split(",")))
 log_file_path_gather = os.path.abspath(os.path.join(args.output_dir, "dataset_generation_gather.log"))
@@ -90,7 +91,7 @@ for gpu_idx in gpu_idxs:
         f"--iterations {args.iterations} --images-per-iteration {args.images_per_iteration} "
         f"--resolution-width {args.resolution_width} --resolution-height {args.resolution_height} "
         f"--scene-graph-rows {args.scene_graph_rows} --scene-graph-cols {args.scene_graph_cols} "
-        f"--persistent-data-cleanup-interval {args.persistent_data_cleanup_interval} "
+        f"--persistent-data-cleanup-interval {args.persistent_data_cleanup_interval} --samples {args.samples} "
         f"--texture-limit {args.texture_limit} --cpu-threads {args.cpu_threads}",
         shell=True,
         encoding="utf-8",
@@ -105,7 +106,7 @@ for gpu_idx in gpu_idxs:
 # terminate subprocesses when receiving SIGINT or SIGTERM
 def signal_handler(sig, frame):
     for process in processes:
-        process.terminate()
+        os.kill(process.pid, signal.SIGINT)
         process.wait()
     logger.error(f"Received signal {sig}, all subprocesses terminated")
     exit(1)

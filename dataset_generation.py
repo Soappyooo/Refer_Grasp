@@ -11,6 +11,7 @@ import random
 from tqdm import tqdm
 import argparse
 import psutil
+import signal
 
 # import debugpy
 
@@ -44,6 +45,7 @@ SEED = None
 PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 0
+SAMPLES = 512
 
 # parse arguments
 parser = argparse.ArgumentParser()
@@ -65,6 +67,7 @@ parser.add_argument(
 )
 parser.add_argument("--texture-limit", type=str, default=TEXTURE_LIMIT, help="texture limit")
 parser.add_argument("--cpu-threads", type=int, default=CPU_THREADS, help="CPU threads used for rendering")
+parser.add_argument("--samples", type=int, default=SAMPLES, help="max samples for rendering")
 args = parser.parse_args()
 # convert path to absolute path
 args.obj_dir = os.path.abspath(args.obj_dir)
@@ -99,6 +102,17 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 
 sys.excepthook = handle_exception
+
+
+def signal_handler(sig, frame):
+    logging.error(f"Received signal {sig}, exiting...")
+    # exit blender
+    bpy.ops.wm.quit_blender()
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 
 def sample_pose(obj: bproc.types.MeshObject, surface: bproc.types.MeshObject):
@@ -146,6 +160,8 @@ def render_settings_init():
     bpy.context.scene.render.use_persistent_data = True
     # dynamic bvh
     bpy.context.scene.cycles.debug_bvh_type = "DYNAMIC_BVH"
+    # set max sampling
+    bpy.context.scene.cycles.samples = args.samples
     # log cpu and gpu used
     logging.info(
         f"CPU threads: {bpy.context.scene.render.threads}, "
