@@ -4,8 +4,10 @@ import os
 import logging
 import signal
 import sys
+import time
 from utils.dataset_utils import DatasetUtils
 
+# TODO: render segmentation mask make sampling slower over time
 
 # set parameters
 GPU_IDS = "0,1,2,3"  # GPU devices id used for rendering
@@ -21,10 +23,11 @@ RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
-PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
+PERSISITENT_DATA_CLEANUP_INTERVAL = 10  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 16
 SAMPLES = 512
+RESTART_INTERVAL = 50  # restart blender every RESTART_INTERVAL iterations to avoid memory leak or slow rendering
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--gpu-ids", type=str, default=GPU_IDS, help="GPU device ids to use")
@@ -45,6 +48,7 @@ parser.add_argument(
 parser.add_argument("--texture-limit", type=str, default=TEXTURE_LIMIT, help="texture limit")
 parser.add_argument("--cpu-threads", type=int, default=CPU_THREADS, help="number of CPU threads used in render for each subprocess")
 parser.add_argument("--samples", type=int, default=SAMPLES, help="max samples for rendering")
+parser.add_argument("--restart-interval", type=int, default=RESTART_INTERVAL, help="restart blender every RESTART_INTERVAL iterations")
 args = parser.parse_args()
 gpu_idxs: list[int] = list(map(int, args.gpu_ids.split(",")))
 log_file_path_gather = os.path.abspath(os.path.join(args.output_dir, "dataset_generation_gather.log"))
@@ -76,60 +80,66 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = handle_exception
 
+for restart_idx in range((args.iterations // args.restart_interval) + 1):
+    logger.info(f"Start dataset generation for restart {restart_idx}/{args.iterations//args.restart_interval}...")
+    # start subprocesses
+    processes = []
+    log_file_paths = []
+    for gpu_idx in gpu_idxs:
+        output_dir_per_gpu = os.path.abspath(os.path.join(args.output_dir, "temp", f"gpu_{gpu_idx}"))
+        log_file_path_per_gpu = os.path.abspath(os.path.join(output_dir_per_gpu, "dataset_generation.log"))
+        log_file_paths.append(log_file_path_per_gpu)
+        process = subprocess.Popen(
+            f"python -m blenderproc run dataset_generation.py --gpu-id {gpu_idx} --obj-dir {args.obj_dir} "
+            f"--blender-scene-file-path {args.blender_scene_file_path} --output-dir {output_dir_per_gpu} "
+            f"--models-info-file-path {args.models_info_file_path} --log-file-path {log_file_path_per_gpu} "
+            # f"--iterations {args.iterations} --images-per-iteration {args.images_per_iteration} "
+            f"--iterations {args.restart_interval if restart_idx < args.iterations // args.restart_interval else args.iterations % args.restart_interval} "
+            f"--images-per-iteration {args.images_per_iteration} "
+            f"--resolution-width {args.resolution_width} --resolution-height {args.resolution_height} "
+            f"--scene-graph-rows {args.scene_graph_rows} --scene-graph-cols {args.scene_graph_cols} "
+            f"--persistent-data-cleanup-interval {args.persistent_data_cleanup_interval} --samples {args.samples} "
+            f"--texture-limit {args.texture_limit} --cpu-threads {args.cpu_threads}",
+            shell=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        processes.append(process)
+        os.set_blocking(process.stdout.fileno(), False) if os.name == "posix" else None  # windows may have blocking issue
+        logger.info(f"GPU {gpu_idx}, restart {restart_idx}/{args.iterations//args.restart_interval}, PID: {process.pid}: started")
 
-# start subprocesses
-processes = []
-log_file_paths = []
-for gpu_idx in gpu_idxs:
-    output_dir_per_gpu = os.path.abspath(os.path.join(args.output_dir, "temp", f"gpu_{gpu_idx}"))
-    log_file_path_per_gpu = os.path.abspath(os.path.join(output_dir_per_gpu, "dataset_generation.log"))
-    log_file_paths.append(log_file_path_per_gpu)
-    process = subprocess.Popen(
-        f"python -m blenderproc run dataset_generation.py --gpu-id {gpu_idx} --obj-dir {args.obj_dir} "
-        f"--blender-scene-file-path {args.blender_scene_file_path} --output-dir {output_dir_per_gpu} "
-        f"--models-info-file-path {args.models_info_file_path} --log-file-path {log_file_path_per_gpu} "
-        f"--iterations {args.iterations} --images-per-iteration {args.images_per_iteration} "
-        f"--resolution-width {args.resolution_width} --resolution-height {args.resolution_height} "
-        f"--scene-graph-rows {args.scene_graph_rows} --scene-graph-cols {args.scene_graph_cols} "
-        f"--persistent-data-cleanup-interval {args.persistent_data_cleanup_interval} --samples {args.samples} "
-        f"--texture-limit {args.texture_limit} --cpu-threads {args.cpu_threads}",
-        shell=True,
-        encoding="utf-8",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
-    processes.append(process)
-    os.set_blocking(process.stdout.fileno(), False) if os.name == "posix" else None  # windows may have blocking issue
-    logger.info(f"PID: {process.pid}, GPU {gpu_idx}: started")
+    # terminate subprocesses when receiving SIGINT or SIGTERM
+    def signal_handler(sig, frame):
+        for process in processes:
+            os.kill(process.pid, signal.SIGINT)
+            process.wait()
+        logger.error(f"Received signal {sig}, all subprocesses terminated")
+        exit(1)
 
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-# terminate subprocesses when receiving SIGINT or SIGTERM
-def signal_handler(sig, frame):
-    for process in processes:
-        os.kill(process.pid, signal.SIGINT)
-        process.wait()
-    logger.error(f"Received signal {sig}, all subprocesses terminated")
-    exit(1)
-
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
-try:
-    while any([process.poll() is None for process in processes]):
-        for i, process in enumerate(processes):
-            if process.poll() is not None and process.poll() != 0:
-                raise Exception(f"PID: {process.pid} exited with code {process.poll()}, check {log_file_paths[i]} for more information")
-            output = process.stdout.readline()
-            if "Progress" in output and "INFO" in output:
-                logger.info(f"PID: {process.pid}, GPU {gpu_idxs[i]}: {output.rstrip().split('-')[-1]}")
-                sys.stdout.flush()
-except Exception as e:
-    for process in processes:
-        process.terminate()
-        process.wait()
-    logger.error(e)
-    raise e
+    try:
+        while any([process.poll() is None for process in processes]):
+            for i, process in enumerate(processes):
+                if process.poll() is not None and process.poll() != 0:
+                    raise Exception(f"PID: {process.pid} exited with code {process.poll()}, check {log_file_paths[i]} for more information")
+                output = process.stdout.readline()
+                if "Progress" in output and "INFO" in output:
+                    logger.info(
+                        f"GPU {gpu_idxs[i]}, restart {restart_idx}/{args.iterations//args.restart_interval}, "
+                        f"PID: {process.pid}: {output.rstrip().split('-')[-1]}"
+                    )
+                    sys.stdout.flush()
+    except Exception as e:
+        for process in processes:
+            process.terminate()
+            process.wait()
+        logger.error(e)
+        raise e
+    logger.info(f"All subprocesses for restart {restart_idx}/{args.iterations//args.restart_interval} finished")
+    time.sleep(10)
 
 logger.info("All subprocesses finished, start merging dataset...")
 

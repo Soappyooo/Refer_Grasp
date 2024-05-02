@@ -42,7 +42,7 @@ RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
-PERSISITENT_DATA_CLEANUP_INTERVAL = 7  # clean up persistent data may speed up rendering for large dataset generation
+PERSISITENT_DATA_CLEANUP_INTERVAL = 10  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 0
 SAMPLES = 512
@@ -84,7 +84,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     filename=args.log_file_path,
-    filemode="w",
+    filemode="a",
 )
 formatter = logging.Formatter(fmt="%(asctime)s - %(levelname)s - line %(lineno)d - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 stream_handler = logging.StreamHandler(sys.stdout)
@@ -108,6 +108,7 @@ def signal_handler(sig, frame):
     logging.error(f"Received signal {sig}, exiting...")
     # exit blender
     bpy.ops.wm.quit_blender()
+    logging.info("Blender exited")
     sys.exit(0)
 
 
@@ -368,19 +369,7 @@ def construct_scene_for_single_image(
 
 if __name__ == "__main__":
     logging.info("Started")
-    # logging.info(
-    #     f"Parameters: OBJ_DIR={os.path.abspath(OBJ_DIR)}, BLENDER_SCENE_FILE_PATH={os.path.abspath(BLENDER_SCENE_FILE_PATH)}, OUTPUT_DIR={os.path.abspath(OUTPUT_DIR)}, "
-    #     f"MODELS_INFO_FILE_PATH={os.path.abspath(MODELS_INFO_FILE_PATH)}, LOG_FILE_PATH={os.path.abspath(LOG_FILE_PATH)}, ITERATIONS={ITERATIONS}, "
-    #     f"IMAGES_PER_ITERATION={IMAGES_PER_ITERATION}, RESOLUTION_WIDTH={RESOLUTION_WIDTH}, RESOLUTION_HEIGHT={RESOLUTION_HEIGHT}, "
-    #     f"SCENE_GRAPH_ROWS={SCENE_GRAPH_ROWS}, SCENE_GRAPH_COLS={SCENE_GRAPH_COLS}, SEED={SEED}, PERSISITENT_DATA_CLEANUP_INTERVAL={PERSISITENT_DATA_CLEANUP_INTERVAL}"
-    # )
-    logging.info(
-        f"Parameters: obj_dir={args.obj_dir}, blender_scene_file_path={args.blender_scene_file_path}, output_dir={args.output_dir}, "
-        f"models_info_file_path={args.models_info_file_path}, log_file_path={args.log_file_path}, iterations={args.iterations}, "
-        f"images_per_iteration={args.images_per_iteration}, resolution_width={args.resolution_width}, resolution_height={args.resolution_height}, "
-        f"scene_graph_rows={args.scene_graph_rows}, scene_graph_cols={args.scene_graph_cols}, seed={args.seed}, "
-        f"persistent_data_cleanup_interval={args.persistent_data_cleanup_interval}, texture_limit={args.texture_limit}"
-    )
+    logging.info(args)
     start_time = time.time()
     # * Check file nums in output_dir
     if not DatasetUtils.check_image_file_nums(args.output_dir, ["depth", "rgb", "mask"]):
@@ -409,8 +398,23 @@ if __name__ == "__main__":
     while i < args.iterations:
         if i % args.persistent_data_cleanup_interval == 0:
             # clear persistent data may speed up rendering for large dataset generation
-            bpy.context.scene.render.use_persistent_data = False
-            bpy.context.scene.render.use_persistent_data = True
+            # bpy.context.scene.render.use_persistent_data = False
+            # bpy.context.scene.render.use_persistent_data = True
+            for block in bpy.data.meshes:
+                if block.users == 0:
+                    bpy.data.meshes.remove(block)
+
+            for block in bpy.data.materials:
+                if block.users == 0:
+                    bpy.data.materials.remove(block)
+
+            for block in bpy.data.textures:
+                if block.users == 0:
+                    bpy.data.textures.remove(block)
+
+            for block in bpy.data.images:
+                if block.users == 0:
+                    bpy.data.images.remove(block)
             logging.info(f"Cleaned up persistent data at iteration {i}")
         random_seed = (int(time.time()) * os.getpid()) % (2**32 - 1) if args.seed is None else args.seed
         np.random.seed(random_seed)
