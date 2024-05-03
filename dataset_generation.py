@@ -42,7 +42,7 @@ RESOLUTION_HEIGHT = 512
 SCENE_GRAPH_ROWS = 4
 SCENE_GRAPH_COLS = 4
 SEED = None
-PERSISITENT_DATA_CLEANUP_INTERVAL = 10  # clean up persistent data may speed up rendering for large dataset generation
+PERSISITENT_DATA_CLEANUP_INTERVAL = 100  # clean up persistent data may speed up rendering for large dataset generation
 TEXTURE_LIMIT = "2048"
 CPU_THREADS = 0
 SAMPLES = 512
@@ -145,8 +145,9 @@ def sample_pose(obj: bproc.types.MeshObject, surface: bproc.types.MeshObject):
 
 def render_settings_init():
     # set up render settings
+    bproc.renderer.enable_segmentation_output(map_by=["scene_id"], default_values={"scene_id": 255})
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
-    bproc.renderer.set_max_amount_of_samples(512)
+    bproc.renderer.set_max_amount_of_samples(args.samples)
     bproc.renderer.set_cpu_threads(args.cpu_threads)
     RendererUtility.set_render_devices(desired_gpu_ids=[args.gpu_id])
     # set up resolution
@@ -161,8 +162,6 @@ def render_settings_init():
     bpy.context.scene.render.use_persistent_data = True
     # dynamic bvh
     bpy.context.scene.cycles.debug_bvh_type = "DYNAMIC_BVH"
-    # set max sampling
-    bpy.context.scene.cycles.samples = args.samples
     # log cpu and gpu used
     logging.info(
         f"CPU threads: {bpy.context.scene.render.threads}, "
@@ -398,8 +397,8 @@ if __name__ == "__main__":
     while i < args.iterations:
         if i % args.persistent_data_cleanup_interval == 0:
             # clear persistent data may speed up rendering for large dataset generation
-            # bpy.context.scene.render.use_persistent_data = False
-            # bpy.context.scene.render.use_persistent_data = True
+            bpy.context.scene.render.use_persistent_data = False
+            bpy.context.scene.render.use_persistent_data = True
             for block in bpy.data.meshes:
                 if block.users == 0:
                     bpy.data.meshes.remove(block)
@@ -430,6 +429,9 @@ if __name__ == "__main__":
             continue
         logging.info("Placed objects in scene")
         sys.stdout.flush()
+        # set pass index for segmentation
+        for index, obj in enumerate([obj for obj in bpy.context.scene.objects if obj.type == "MESH"]):
+            obj.pass_index = index + 1
         # sample environment and render images
         image_indices = []
         for image_index in range(args.images_per_iteration):
@@ -440,7 +442,6 @@ if __name__ == "__main__":
                 break
             logging.info(f"Constructed scene for image ({image_index + 1}/{args.images_per_iteration})")
             # render image
-            bproc.renderer.enable_segmentation_output(map_by=["scene_id"], default_values={"scene_id": 255})
             data = bproc.renderer.render()
             data["depth"] = bproc.postprocessing.add_kinect_azure_noise(data["depth"], data["colors"])
             logging.info(f"Rendered image ({image_index + 1}/{args.images_per_iteration})")
