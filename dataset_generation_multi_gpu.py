@@ -4,6 +4,7 @@ import os
 import logging
 import signal
 import sys
+import math
 import time
 from utils.dataset_utils import DatasetUtils
 
@@ -80,8 +81,8 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = handle_exception
 
-for restart_idx in range((args.iterations // args.restart_interval) + 1):
-    logger.info(f"Start dataset generation for restart {restart_idx}/{args.iterations//args.restart_interval}...")
+for restart_idx in range(math.ceil(args.iterations / args.restart_interval)):
+    logger.info(f"Start dataset generation for restart {restart_idx}/{math.ceil(args.iterations / args.restart_interval)-1}...")
     # start subprocesses
     processes = []
     log_file_paths = []
@@ -93,8 +94,7 @@ for restart_idx in range((args.iterations // args.restart_interval) + 1):
             f"python -m blenderproc run dataset_generation.py --gpu-id {gpu_idx} --obj-dir {args.obj_dir} "
             f"--blender-scene-file-path {args.blender_scene_file_path} --output-dir {output_dir_per_gpu} "
             f"--models-info-file-path {args.models_info_file_path} --log-file-path {log_file_path_per_gpu} "
-            # f"--iterations {args.iterations} --images-per-iteration {args.images_per_iteration} "
-            f"--iterations {args.restart_interval if restart_idx < args.iterations // args.restart_interval else args.iterations % args.restart_interval} "
+            f"--iterations {args.restart_interval if restart_idx < math.ceil(args.iterations / args.restart_interval)-1 else args.iterations-restart_idx*args.restart_interval} "
             f"--images-per-iteration {args.images_per_iteration} "
             f"--resolution-width {args.resolution_width} --resolution-height {args.resolution_height} "
             f"--scene-graph-rows {args.scene_graph_rows} --scene-graph-cols {args.scene_graph_cols} "
@@ -107,7 +107,7 @@ for restart_idx in range((args.iterations // args.restart_interval) + 1):
         )
         processes.append(process)
         os.set_blocking(process.stdout.fileno(), False) if os.name == "posix" else None  # windows may have blocking issue
-        logger.info(f"GPU {gpu_idx}, restart {restart_idx}/{args.iterations//args.restart_interval}, PID: {process.pid}: started")
+        logger.info(f"GPU {gpu_idx}, restart {restart_idx}/{math.ceil(args.iterations / args.restart_interval)-1}, PID: {process.pid}: started")
 
     # terminate subprocesses when receiving SIGINT or SIGTERM
     def signal_handler(sig, frame):
@@ -128,7 +128,7 @@ for restart_idx in range((args.iterations // args.restart_interval) + 1):
                 output = process.stdout.readline()
                 if "Progress" in output and "INFO" in output:
                     logger.info(
-                        f"GPU {gpu_idxs[i]}, restart {restart_idx}/{args.iterations//args.restart_interval}, "
+                        f"GPU {gpu_idxs[i]}, restart {restart_idx}/{math.ceil(args.iterations / args.restart_interval)-1}, "
                         f"PID: {process.pid}: {output.rstrip().split('-')[-1]}"
                     )
                     sys.stdout.flush()
@@ -138,7 +138,7 @@ for restart_idx in range((args.iterations // args.restart_interval) + 1):
             process.wait()
         logger.error(e)
         raise e
-    logger.info(f"All subprocesses for restart {restart_idx}/{args.iterations//args.restart_interval} finished")
+    logger.info(f"All subprocesses for restart {restart_idx}/{math.ceil(args.iterations / args.restart_interval)-1} finished")
     time.sleep(10)
 
 logger.info("All subprocesses finished, start merging dataset...")

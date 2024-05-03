@@ -143,6 +143,8 @@ class DatasetUtils:
         with open(os.path.join(save_path, file_name), "r") as f:
             expressions = json.load(f)
         # if num_files is not None, only merge the last num_files files
+        if num_files == 0:
+            return len(expressions)
         if num_files is not None:
             files_to_merge = sorted(os.listdir(temp_path))[-num_files:]
         else:
