@@ -389,7 +389,7 @@ class DatasetUtils:
 
         Args:
             tsv_path (str): The folder path of the tsv file to write.
-            dataset_path (str): The path of the dataset.
+            dataset_path (str): The path of the dataset. Contains folders `rgb`,`mask`,`depth` and file `expressions.json`.
             tsv_filename (str, optional): The file name of the tsv file. Defaults to "res.tsv".
             expression_json_temp (list, optional): Temporary expressions json. Defaults to None.
             shuffle (bool, optional): Shuffle the lines if True. Defaults to True.
@@ -402,9 +402,10 @@ class DatasetUtils:
         lines = []
         for i, item in enumerate(tqdm(expressions)):
             for img_idx in item["img_idxs"]:
-                rgb_img_path = os.path.join(dataset_path, "rgb", f"rgb_{img_idx:08d}.jpg")
-                mask_img_path = os.path.join(dataset_path, "mask", f"mask_{img_idx:08d}.png")
-                mask = cv2.imread(mask_img_path, cv2.IMREAD_UNCHANGED)
+                rgb_img_rel_path = os.path.join("rgb", f"rgb_{img_idx:08d}.jpg")
+                mask_img_rel_path = os.path.join("mask", f"mask_{img_idx:08d}.png")
+                mask_img_abs_path = os.path.join(dataset_path, mask_img_rel_path)
+                mask = cv2.imread(mask_img_abs_path, cv2.IMREAD_UNCHANGED)
                 for item_expressions in item["expressions"]:
                     bound_box = DatasetUtils.get_bound_box(mask, item_expressions["obj"]["scene_id"])
                     expression = item_expressions["expression"]
@@ -430,7 +431,7 @@ class DatasetUtils:
 
                     # * tsv format: index \t path_to_image \t boundbox(x1,y1,x2,y2) \t expression \t polygon \t polygon_interpolated
                     line = (
-                        f"{len(lines)}\t{rgb_img_path}\t{bound_box[0][0]},{bound_box[0][1]},{bound_box[1][0]},{bound_box[1][1]}"
+                        f"{len(lines)}\t{rgb_img_rel_path}\t{bound_box[0][0]},{bound_box[0][1]},{bound_box[1][0]},{bound_box[1][1]}"
                         + f"\t{expression}\t{pts_string}\t{pts_string_interpolated}\n"
                     )
                     # replace "\" with "/"
