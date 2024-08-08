@@ -163,10 +163,17 @@ def render_settings_init():
     # dynamic bvh
     bpy.context.scene.cycles.debug_bvh_type = "DYNAMIC_BVH"
     # log cpu and gpu used
-    logging.info(
-        f"CPU threads: {bpy.context.scene.render.threads}, "
-        + f"GPU devices: {bpy.context.preferences.addons['cycles'].preferences.get_devices_for_type('OPTIX')[args.gpu_id].name}"
-    )
+    is_gpu = False
+    for device_type in ["OPTIX", "CUDA", "HIP"]:
+        try:
+            device_name = bpy.context.preferences.addons["cycles"].preferences.get_devices_for_type(device_type)[args.gpu_id].name
+            logging.info(f"CPU threads: {bpy.context.scene.render.threads}, " + f"GPU devices: {device_name} ({device_type})")
+            is_gpu = True
+            break
+        except:
+            continue
+    if not is_gpu:
+        logging.info(f"CPU threads: {bpy.context.scene.render.threads}, GPU devices: None")
 
 
 def background_scene_init(entities: list[bproc.types.Entity]) -> tuple[list[bproc.types.MeshObject], bproc.types.Light]:
