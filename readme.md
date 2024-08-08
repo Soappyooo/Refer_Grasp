@@ -3,7 +3,7 @@
 
 A referring expression comprehension / segmentation dataset generation engine,  capable of generating synthetic photos and expressions for language-conditioned grasping. Based on Blender and [BlenderProc](https://github.com/DLR-RM/BlenderProc).  
 
-The RefGrasp Dataset can be downloaded from [Google Drive](https://drive.google.com/file/d/1eHsqY1xMYZPKOF-jkt1TOHodXPmYYjG8/view?usp=drive_link) or [Quark Drive](https://pan.quark.cn/s/4dea47501acf). Instructions on how to use the dataset can be found [**here**](./dataset_usage.md).
+The RefGrasp Dataset (6.5GB) can be downloaded from [Google Drive](https://drive.google.com/file/d/1eHsqY1xMYZPKOF-jkt1TOHodXPmYYjG8/view?usp=drive_link) or [Quark Drive](https://pan.quark.cn/s/4dea47501acf). Instructions on how to use the dataset can be found [**here**](./dataset_usage.md).
 
 Examples:  
 ![fig1](/images/fig1.jpg "fig1")
