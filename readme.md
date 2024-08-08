@@ -1,16 +1,17 @@
 <a id="top"></a>
 # Work in progress
-English | [中文](readme_zh.md) &nbsp;
-[BlenderProc](https://github.com/DLR-RM/BlenderProc)
 
-A referring expression comprehension / segmentation dataset generation engine,  capable of generating synthetic photos and expressions for language-conditioned grasping. Based on Blender and BlenderProc.
+A referring expression comprehension / segmentation dataset generation engine,  capable of generating synthetic photos and expressions for language-conditioned grasping. Based on Blender and [BlenderProc](https://github.com/DLR-RM/BlenderProc).  
 
-examples:  
+The RefGrasp Dataset can be downloaded from [Google Drive](https://drive.google.com/file/d/1eHsqY1xMYZPKOF-jkt1TOHodXPmYYjG8/view?usp=drive_link) or [Quark Drive](https://pan.quark.cn/s/4dea47501acf). Instructions on how to use the dataset can be found [**here**](./dataset_usage.md).
+
+Examples:  
 ![fig1](/images/fig1.jpg "fig1")
 ![fig2](/images/fig2.jpg "fig2")
 ![fig3](/images/fig3.png "fig3")
 
-a conda environment is recommended for the project. Below is a guide to set up the environment for project and run the dataset generation process. The project has been tested on **Windows 10** and **Ubuntu 18.04**.
+# The content below is for dataset generation.
+a conda environment is recommended for the project. Below is a guide to set up the environment for project and run the dataset generation process. The project has been tested on **Windows 10**, **Windows 11** and **Ubuntu 18.04**.
 # Quick Start
 ### 1. Clone the project:
 ```bash
@@ -36,7 +37,7 @@ python -m blenderproc pip install pandas tqdm debugpy openpyxl psutil
 ### 5. Download models and scene:
 Download (760MB) from [Google Drive](https://drive.google.com/file/d/1tDshqp_SNw9SoH4jtoeFkZu8dhrZSY12/view?usp=sharing) or [Quark Drive](https://pan.quark.cn/s/d94083a37db0). Extract the downloaded file to the project directory. The directory structure should look like this:
 <pre>
-/RefGrasp  
+RefGrasp  
 ├─ <b>blender_files</b>
 │  └─ <b>background.blend</b>
 ├─ BlenderProc  
@@ -44,6 +45,7 @@ Download (760MB) from [Google Drive](https://drive.google.com/file/d/1tDshqp_SNw
 ├─ images 
 ├─ <b>models</b> 
 │  └─ <b>...(290 files)</b>
+├─ tool_scripts
 ├─ utils
 └─ ...(other files)  
 </pre>
@@ -75,9 +77,10 @@ python -m blenderproc run dataset_generation.py --output-dir ./output --iteratio
 `--scene-graph-rows`: Scene graph rows. Default to 4.  
 `--scene-graph-cols`: Scene graph cols. Default to 4.  
 `--seed`: Random seed, should not be set unless debugging. Default to None.  
-`--persistent-data-cleanup-interval`: Clean up persistent data interval. Default to 7.  
+`--persistent-data-cleanup-interval`: Clean up persistent data interval. Default to 100.  
 `--texture-limit`: Texture limit. Default to "2048".  
 `--cpu-threads`: Number of CPU threads used in render. 0 for auto setting. Default to 0.  
+`--samples`: Max samples for rendering, bigger for less noise. Default to 512.
 
 ### Run with arguments on multiple GPUs:
 For example, to generate a dataset with 1000 iterations and 5 images per iteration on 4 GPUs, run:
@@ -96,9 +99,17 @@ python dataset_generation_multi_gpu.py --gpu-ids 0,1,2,3 --output-dir ./output -
 `--resolution-height`: Render resolution height. Default to 512.  
 `--scene-graph-rows`: Scene graph rows. Default to 4.  
 `--scene-graph-cols`: Scene graph cols. Default to 4.   
-`--persistent-data-cleanup-interval`: Clean up persistent data interval. Default to 7.  
+`--persistent-data-cleanup-interval`: Clean up persistent data interval. Default to 100.  
 `--texture-limit`: Texture limit. Default to "2048".  
 `--cpu-threads`: Number of CPU threads used in render for each subprocess. 0 for auto setting. Default to 16. 
+`--samples`: Max samples for rendering, bigger for less noise. Default to 512.
 
+# Acknowledgments
+This project would not have been possible without the valuable work of several other open-source projects. We would like to extend our gratitude to the following repositories for their contributions, which were instrumental in the development of this project:
+
+* [BlenderProc](https://github.com/DLR-RM/BlenderProc): Thank you for providing a procedrual rendering pipeline and other useful functionalities that was adapted and integrated into this project.
+* [polygon-transformer](https://github.com/amazon-science/polygon-transformer): We utilized and modified the polygon processing module, which greatly helped in annotating the dataset.
+
+We highly appreciate the efforts of these projects and their maintainers. Their contributions to the open-source community are invaluable.
 
 [to top](#top)
