@@ -1,4 +1,17 @@
 <a id="top"></a>
+
+<div align="center">
+
+<h1>Refer and Grasp: Vision-Language Guided Continuous Dexterous Grasping</h1>
+<h2>IROS 2025</h2>
+
+<p>
+  <a href="https://refer-and-grasp.github.io/" target="_blank">🌐 Website</a> |
+  <a href="https://github.com/Soappyooo/Polyformer_RGBD" target="_blank">🤖 Model</a>
+</p>
+
+</div>
+
 # RefGrasp Dataset
 
 A referring expression comprehension / segmentation dataset generation engine,  capable of generating synthetic photos and expressions for language-conditioned grasping. Based on Blender and [BlenderProc](https://github.com/DLR-RM/BlenderProc).  
