@@ -7,7 +7,8 @@
 
 <p>
   <a href="https://refer-and-grasp.github.io/" target="_blank">🌐 Website</a> |
-  <a href="https://github.com/Soappyooo/Polyformer_RGBD" target="_blank">🤖 Model</a>
+  <a href="https://github.com/Soappyooo/Polyformer_RGBD" target="_blank">🤖 Model</a> |
+  <a href="https://refer-and-grasp.github.io/IROS_Refer_and_Grasp.pdf" target="_blank">📄 Paper</a>
 </p>
 
 </div>
@@ -129,5 +130,19 @@ This project would not have been possible without the valuable work of several o
 * [polygon-transformer](https://github.com/amazon-science/polygon-transformer): We utilized and modified the polygon processing module, which greatly helped in annotating the dataset.
 
 We highly appreciate the efforts of these projects and their maintainers. Their contributions to the open-source community are invaluable.
+
+# Citation
+```bibtex
+@INPROCEEDINGS{11247415,
+  author={Huang, Yayu and Fan, Dongxuan and Qi, Wen and Li, Daheng and Yang, Yifan and Luo, Yongkang and Sun, Jia and Liu, Qian and Wang, Peng},
+  booktitle={2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)}, 
+  title={Refer and Grasp: Vision-Language Guided Continuous Dexterous Grasping}, 
+  year={2025},
+  volume={},
+  number={},
+  pages={7576-7583},
+  keywords={Visualization;Grounding;Focusing;Grasping;Manuals;Robustness;Indoor environment;Labeling;Robots;Engines},
+  doi={10.1109/IROS60139.2025.11247415}}
+```
 
 [to top](#top)
